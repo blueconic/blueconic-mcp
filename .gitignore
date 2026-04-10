@@ -75,3 +75,4 @@ test-reports/
 
 # IDEs and editors
 *.code-workspace
+.claude/

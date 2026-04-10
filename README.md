@@ -313,6 +313,10 @@ This MCP server runs entirely on your local machine. Your BlueConic credentials 
 
 For BlueConic's privacy policy, see: https://www.blueconic.com/privacy-policy
 
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
 ## Support
 
 - Documentation: https://support.blueconic.com/en/articles/415706-blueconic-mcp-client-for-ai-coding-assistants
