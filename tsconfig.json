@@ -9,12 +9,13 @@
     "skipLibCheck": true,
     "types": ["node", "jest"],
     "outDir": "dist",
+    "rootDir": "src",
     "allowJs": false,
     "resolveJsonModule": true,
     "declaration": true
   },
   "include": [
-    "*.ts"
+    "src/**/*.ts"
   ],
   "exclude": [
     "node_modules",

@@ -44,9 +44,6 @@ temp/
 # Yarn Integrity file
 .yarn-integrity
 
-# dotenv environment variables file
-.env
-
 # IDE/Editor files
 .vscode/
 .idea/
@@ -66,6 +63,7 @@ Thumbs.db
 # Build outputs
 dist/
 build/
+*.mcpb
 
 # Test artifacts
 test-results/
@@ -74,9 +72,6 @@ test-reports/
 # Backup files
 *.backup
 *.bak
-
-# TypeScript cache
-dist/
 
 # IDEs and editors
 *.code-workspace

@@ -1,6 +1,3 @@
-import { fetch } from "undici";
-
-let openApiSpec: any = null;
 let tools: any[] = [];
 
 /** Load OpenAPI specification from the user's tenant */
@@ -22,18 +19,19 @@ export async function loadOpenApiSpec(tenantUrl?: string, version?: string): Pro
       throw new Error(`Failed to load OpenAPI spec: ${response.status} ${response.statusText}`);
     }
 
-    openApiSpec = await response.json();
-    generateToolsFromSpec();
+    const openApiSpec = await response.json() as any;
+    generateToolsFromSpec(openApiSpec);
 
     console.error(`Loaded ${tools.length} API endpoints as MCP tools`);
-  } catch (error: any) {
-    console.error("Failed to load OpenAPI spec:", error.message, error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Failed to load OpenAPI spec:", message);
     throw error;
   }
 }
 
 /** Generate MCP tools from OpenAPI specification. */
-function generateToolsFromSpec(): void {
+function generateToolsFromSpec(openApiSpec: any): void {
   tools = [];
 
   if (!openApiSpec || !openApiSpec.paths) {
@@ -114,7 +112,6 @@ export function generateInputSchema(operation: any, path: string): any {
           description: param.description
         };
         if (param.schema?.type === "array") {
-          // For array types, include items schema
           schema.properties[param.name].items = param.schema.items || { type: "string" };
         }
         if (param.required) {

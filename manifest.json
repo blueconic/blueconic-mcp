@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "blueconic-mcp",
   "display_name": "BlueConic",
-  "version": "0.0.13",
+  "version": "1.0.0",
   "description": "Connect Claude to your BlueConic CDP to explore segments, profiles, connections, dialogues, and more.",
   "long_description": "Access your BlueConic Customer Data Platform directly from Claude. Query segments, browse profiles, inspect connections, view dialogues, explore lifecycle stages, and analyze your customer data — all through natural conversation.",
   "author": {
@@ -11,10 +11,20 @@
   },
   "icon": "icon.png",
   "icons": [
-    { "src": "icon.png", "size": "512x512", "theme": "light" },
-    { "src": "icon-dark.png", "size": "512x512", "theme": "dark" }
+    {
+      "src": "icon.png",
+      "size": "512x512",
+      "theme": "light"
+    },
+    {
+      "src": "icon-dark.png",
+      "size": "512x512",
+      "theme": "dark"
+    }
   ],
-  "privacy_policies": ["https://www.blueconic.com/privacy-policy"],
+  "privacy_policies": [
+    "https://www.blueconic.com/privacy-policy"
+  ],
   "user_config": {
     "tenant_url": {
       "type": "string",
@@ -42,7 +52,9 @@
     "entry_point": "dist/client-side-server.js",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/dist/client-side-server.js"],
+      "args": [
+        "${__dirname}/dist/client-side-server.js"
+      ],
       "env": {
         "BLUECONIC_TENANT_URL": "${user_config.tenant_url}",
         "OAUTH_CLIENT_ID": "${user_config.client_id}",
@@ -53,6 +65,10 @@
   "tools": [],
   "compatibility": {
     "claude_desktop": ">=0.10.0",
-    "platforms": ["darwin", "win32", "linux"]
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ]
   }
 }

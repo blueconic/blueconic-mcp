@@ -11,12 +11,7 @@ import { getAccessToken } from "./auth.js";
 import { loadOpenApiSpec, tools } from "./openapi-tools.js";
 import { makeApiCall } from "./api-client.js";
 
-import packageJson from "./package.json" with { type: "json" };
-
-import {
-  setGlobalDispatcher,
-  Agent,
-} from "undici";
+import packageJson from "../package.json" with { type: "json" };
 
 // User-specific configuration from environment variables.
 // e.g., https://tenant1.blueconic.net/rest/v2
@@ -27,18 +22,11 @@ const OAUTH_CLIENT_SECRET = process.env.OAUTH_CLIENT_SECRET;
 // Normalize TENANT_URL
 if (TENANT_URL) {
   if (!TENANT_URL.startsWith("http")) {
-    // Add https:// prefix if missing
     TENANT_URL = `https://${TENANT_URL}`;
   }
   if (TENANT_URL.endsWith("/")) {
-    // Remove trailing slash
     TENANT_URL = TENANT_URL.slice(0, -1);
   }
-}
-
-// Allow self-signed certificates for local development
-if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") {
-  setGlobalDispatcher(new Agent({ connect: { rejectUnauthorized: false } }));
 }
 
 /**
@@ -67,8 +55,6 @@ const mcpServer = new McpServer(
 
 /**
  * Register dynamically discovered tools from the tenant's OpenAPI spec.
- * Each tool is registered via McpServer.registerTool() with its annotations
- * and a callback that handles authentication and API calls.
  */
 function registerDynamicTools(): void {
   for (const tool of tools) {
@@ -86,7 +72,6 @@ function registerDynamicTools(): void {
         const token = await getAccessToken(TENANT_URL!, OAUTH_CLIENT_ID!, OAUTH_CLIENT_SECRET!);
 
         try {
-          // Extract parameters
           const pathParams: Record<string, string> = {};
           const queryParams: Record<string, string> = {};
           let requestBody: unknown = null;
@@ -101,8 +86,7 @@ function registerDynamicTools(): void {
             }
           }
 
-          // Make the API call
-          const result = await makeApiCall(TENANT_URL!, token, tool.method, tool.path, pathParams, queryParams, requestBody);
+          const result = await makeApiCall(TENANT_URL!, token, tool.method, tool.path, packageJson.version, pathParams, queryParams, requestBody);
 
           return {
             content: [
@@ -113,12 +97,13 @@ function registerDynamicTools(): void {
             ]
           };
 
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
           return {
             content: [
               {
                 type: "text" as const,
-                text: `Error: ${error.message}`
+                text: `Error: ${message}`
               }
             ],
             isError: true
@@ -129,11 +114,7 @@ function registerDynamicTools(): void {
   }
 }
 
-/**
- * Start the server
- */
 async function main() {
-  // Validate required environment variables
   if (!TENANT_URL || !OAUTH_CLIENT_ID || !OAUTH_CLIENT_SECRET) {
     console.error("Error: Missing required environment variables");
     console.error("Please set:");
@@ -146,7 +127,6 @@ async function main() {
   }
 
   try {
-    // Load OpenAPI spec on startup and register tools dynamically
     await loadOpenApiSpec(TENANT_URL, packageJson.version);
     registerDynamicTools();
 
@@ -156,21 +136,20 @@ async function main() {
     console.error(`BlueConic Dynamic MCP Server started successfully (version: ${packageJson.version})`);
     console.error(`Tenant: ${TENANT_URL}`);
     console.error(`Loaded ${tools.length} API endpoints`);
-  } catch (error: any) {
-    console.error("Failed to start server:", error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Failed to start server:", message);
     process.exit(1);
   }
 }
 
-// Handle graceful shutdown
 process.on("SIGINT", async () => {
   console.error("Shutting down BlueConic Dynamic MCP Server...");
   await mcpServer.close();
   process.exit(0);
 });
 
-// Start the server
-main().catch((error: any) => {
+main().catch((error: unknown) => {
   console.error("Failed to start server:", error);
   process.exit(1);
 });

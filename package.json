@@ -1,25 +1,27 @@
 {
   "name": "@blueconic/blueconic-mcp",
-  "version": "0.0.13",
+  "version": "1.0.0",
   "description": "BlueConic Client-Side MCP Server - Dynamic multi-tenant OpenAPI adapter for providing context to AI models",
   "main": "dist/client-side-server.js",
   "type": "module",
   "scripts": {
-    "start": "npx tsx client-side-server.ts",
-    "dev": "node --import=tsx --inspect client-side-server.ts",
+    "start": "npx tsx src/client-side-server.ts",
+    "dev": "node --import=tsx --inspect src/client-side-server.ts",
     "build": "npx tsc",
+    "lint": "npx eslint src/",
     "publish-snapshot": "npm version prerelease --preid SNAPSHOT && npm run build && npm test && npm i && npm publish --tag snapshot",
     "publish-release": "npm version patch && npm run build && npm test && npm i && npm publish --tag latest",
     "test": "npx jest --config jest.config.cjs --coverage",
     "pack": "npm run build && npx @anthropic-ai/mcpb pack"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "undici": "^8.0.2"
+    "@modelcontextprotocol/sdk": "^1.29.0"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^25.6.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "eslint": "^10.2.0",
     "jest": "^30.3.0",
     "ts-jest": "^29.4.9",

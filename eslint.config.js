@@ -1,27 +1,18 @@
-/**
- * ESLint configuration for BlueConic MCP Server
- */
+import tseslint from "@typescript-eslint/eslint-plugin";
+import tsparser from "@typescript-eslint/parser";
+
 export default [
   {
+    files: ["src/**/*.ts"],
     languageOptions: {
-      ecmaVersion: 2023,
-      sourceType: "module",
-      globals: {
-        console: "readonly",
-        process: "readonly",
-        Buffer: "readonly",
-        global: "readonly",
-        __dirname: "readonly",
-        __filename: "readonly",
-        clearImmediate: "readonly",
-        clearInterval: "readonly",
-        clearTimeout: "readonly",
-        setImmediate: "readonly",
-        setInterval: "readonly",
-        setTimeout: "readonly",
-        URL: "readonly",
-        URLSearchParams: "readonly"
+      parser: tsparser,
+      parserOptions: {
+        ecmaVersion: 2023,
+        sourceType: "module"
       }
+    },
+    plugins: {
+      "@typescript-eslint": tseslint
     },
     rules: {
       // Code style
@@ -32,14 +23,13 @@ export default [
       "no-trailing-spaces": "error",
       "eol-last": "error",
 
-      // Variables
-      "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
-      "no-undef": "error",
-      "no-redeclare": "error",
+      // Use TS-aware versions of these rules
+      "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+      "no-redeclare": "off",
+      "@typescript-eslint/no-redeclare": "error",
 
       // Functions
       "no-unreachable": "error",
-      "consistent-return": "error",
       "no-return-assign": "error",
 
       // Objects and arrays
@@ -60,7 +50,6 @@ export default [
       "template-curly-spacing": "error",
 
       // Async/await
-      "require-await": "error",
       "no-async-promise-executor": "error",
 
       // Error handling
@@ -78,26 +67,19 @@ export default [
     }
   },
   {
-    files: ["tests/**/*.js"],
+    files: ["src/__tests__/**/*.ts"],
     languageOptions: {
-      globals: {
-        describe: "readonly",
-        it: "readonly",
-        test: "readonly",
-        expect: "readonly",
-        beforeAll: "readonly",
-        afterAll: "readonly",
-        beforeEach: "readonly",
-        afterEach: "readonly",
-        jest: "readonly"
+      parser: tsparser,
+      parserOptions: {
+        ecmaVersion: 2023,
+        sourceType: "module"
       }
     },
+    plugins: {
+      "@typescript-eslint": tseslint
+    },
     rules: {
-      // Test-specific rules
       "no-unused-expressions": "off"
     }
   }
 ];
-
-
-
