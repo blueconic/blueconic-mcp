@@ -6,12 +6,11 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
+    "isolatedModules": true,
     "skipLibCheck": true,
-    "types": ["node", "jest"],
     "outDir": "dist",
     "rootDir": "src",
     "allowJs": false,
-    "resolveJsonModule": true,
     "declaration": true
   },
   "include": [
@@ -19,6 +18,8 @@
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "server",
+    "src/__tests__/**/*"
   ]
 }

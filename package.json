@@ -3,29 +3,42 @@
   "version": "1.0.0",
   "description": "BlueConic Client-Side MCP Server - Dynamic multi-tenant OpenAPI adapter for providing context to AI models",
   "main": "dist/client-side-server.js",
+  "types": "dist/client-side-server.d.ts",
   "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
-    "start": "npx tsx src/client-side-server.ts",
+    "start": "tsx src/client-side-server.ts",
     "dev": "node --import=tsx --inspect src/client-side-server.ts",
-    "build": "npx tsc",
-    "lint": "npx eslint src/",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json",
+    "build:mcpb": "node scripts/build-mcpb.mjs",
+    "check:mcpb": "node scripts/check-mcpb-bundle.mjs",
+    "lint": "eslint src scripts",
     "publish-snapshot": "npm version prerelease --preid SNAPSHOT && npm run build && npm test && npm i && npm publish --tag snapshot",
     "publish-release": "npm version patch && npm run build && npm test && npm i && npm publish --tag latest",
-    "test": "npx jest --config jest.config.cjs --coverage",
-    "pack": "npm run build && npx @anthropic-ai/mcpb pack"
+    "prepack": "npm run build",
+    "test:unit": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.config.cjs --coverage",
+    "test:mcpb": "npm run build:mcpb && npm run check:mcpb",
+    "test": "npm run test:unit && npm run test:mcpb",
+    "validate:mcpb": "npm run build:mcpb && npm run check:mcpb && mcpb validate .",
+    "pack:mcpb": "npm run build:mcpb && npm run check:mcpb && mcpb pack . dist/blueconic-mcp.mcpb"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0"
+    "@modelcontextprotocol/sdk": "^1.18.0"
   },
   "devDependencies": {
+    "@anthropic-ai/mcpb": "^1.1.0",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.6.0",
+    "@types/node": "^24.3.1",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
-    "eslint": "^10.2.0",
-    "jest": "^30.3.0",
-    "ts-jest": "^29.4.9",
-    "tsx": "^4.21.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.35.0",
+    "jest": "^30.1.3",
+    "ts-jest": "^29.4.1",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   },
   "bin": {
@@ -41,5 +54,8 @@
     "multi-tenant"
   ],
   "author": "BlueConic",
-  "license": "SEE LICENSE IN LICENSE"
+  "license": "SEE LICENSE IN LICENSE",
+  "engines": {
+    "node": ">=18"
+  }
 }

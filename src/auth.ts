@@ -1,8 +1,11 @@
+import { fetch } from "./http.js";
+
 let accessToken: string | null = null;
+let cachedCredentialKey: string | null = null;
 let tokenExpiry: number | null = null;
 
-/** Get OAuth2 access token using client credentials flow. */
-async function getAccessToken(
+/** Get an OAuth2 access token using the client credentials flow. */
+export async function getAccessToken(
   tenantUrl: string,
   clientId: string,
   clientSecret: string
@@ -11,39 +14,34 @@ async function getAccessToken(
     throw new Error("OAuth credentials or tenant URL not configured");
   }
 
-  // Return cached token if still valid.
-  if (accessToken && tokenExpiry && Date.now() < tokenExpiry) {
+  const credentialKey = `${tenantUrl}::${clientId}`;
+  if (accessToken && tokenExpiry && cachedCredentialKey === credentialKey && Date.now() < tokenExpiry) {
     return accessToken;
   }
 
-  try {
-    const response = await fetch(`${tenantUrl}/rest/v2/oauth/token`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`
-      },
-      body: "grant_type=client_credentials&scope=read:segments read:profiles read:connections read:interactions"
-    });
+  const response = await fetch(`${tenantUrl}/rest/v2/oauth/token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Authorization": `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`
+    },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      scope: "read:segments read:profiles read:connections read:interactions"
+    }).toString()
+  });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OAuth token request failed: ${response.status} ${response.statusText}. ${errorText}`);
-    }
-
-    const tokenData = await response.json() as { access_token: string; expires_in?: number };
-    accessToken = tokenData.access_token;
-
-    // Set expiry to 90% of actual expiry (seconds * 1000 * 0.9).
-    const expiresIn = tokenData.expires_in || 3600;
-    tokenExpiry = Date.now() + (expiresIn * 1000 * 0.9);
-
-    return accessToken!;
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("Failed to get OAuth token:", message);
-    throw error;
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OAuth token request failed: ${response.status} ${response.statusText}. ${errorText}`);
   }
-}
 
-export { getAccessToken };
+  const tokenData = await response.json() as { access_token: string; expires_in?: number };
+  accessToken = tokenData.access_token;
+  cachedCredentialKey = credentialKey;
+
+  const expiresInSeconds = tokenData.expires_in ?? 3600;
+  tokenExpiry = Date.now() + (expiresInSeconds * 1000 * 0.9);
+
+  return accessToken;
+}

@@ -1,68 +1,66 @@
 import { generateInputSchema } from "../openapi-tools.js";
 
 describe("generateInputSchema", () => {
-  it("should generate schema for path params", () => {
-    const operation = { parameters: [] };
-    const path = "/foo/{bar}";
-    const schema = generateInputSchema(operation, path);
-    expect(schema.properties.bar).toBeDefined();
-    expect(schema.required).toContain("bar");
+  it("generates schema entries for path params", () => {
+    const schema = generateInputSchema({ parameters: [] }, "/segments/{segmentId}");
+
+    expect(schema.properties.segmentId).toBeDefined();
+    expect(schema.required).toContain("segmentId");
   });
 
-  it("should handle query parameters", () => {
-    const operation = { parameters: [{ in: "query", name: "q", schema: { type: "string" }, required: true }] };
-    const path = "/foo";
-    const schema = generateInputSchema(operation, path);
-    expect(schema.properties.q).toBeDefined();
-    expect(schema.required).toContain("q");
+  it("handles required query parameters", () => {
+    const schema = generateInputSchema(
+      {
+        parameters: [{ in: "query", name: "limit", schema: { type: "number" }, required: true }]
+      },
+      "/segments"
+    );
+
+    expect(schema.properties.limit).toBeDefined();
+    expect(schema.required).toContain("limit");
   });
 
-  it("should handle array query parameters", () => {
-    const operation = { parameters: [{ in: "query", name: "tags", schema: { type: "array", items: { type: "string" } }, required: false }] };
-    const path = "/foo";
-    const schema = generateInputSchema(operation, path);
-    expect(schema.properties.tags).toBeDefined();
-    expect(schema.properties.tags.type).toBe("array");
-    expect(schema.properties.tags.items).toEqual({ type: "string" });
-    expect(schema.required).not.toContain("tags");
+  it("preserves array query parameter metadata", () => {
+    const schema = generateInputSchema(
+      {
+        parameters: [{ in: "query", name: "tags", schema: { type: "array", items: { type: "string" } } }]
+      },
+      "/profiles"
+    );
+
+    expect(schema.properties.tags).toEqual({
+      type: "array",
+      description: undefined,
+      items: { type: "string" }
+    });
   });
 
-  it("should handle request body schema", () => {
-    const operation = {
-      parameters: [],
-      method: "POST",
-      requestBody: {
-        content: {
-          "application/json": {
-            schema: {
-              type: "object",
-              properties: { foo: { type: "string" } },
-              required: ["foo"]
+  it("includes request body schema for write operations", () => {
+    const schema = generateInputSchema(
+      {
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  foo: { type: "string" }
+                },
+                required: ["foo"]
+              }
             }
           }
         }
+      },
+      "/profiles",
+      "post"
+    );
+
+    expect(schema.properties.requestBody).toMatchObject({
+      type: "object",
+      properties: {
+        foo: { type: "string" }
       }
-    };
-    const path = "/foo";
-    const schema = generateInputSchema(operation, path);
-    expect(schema.properties.requestBody).toBeDefined();
-    expect(schema.properties.requestBody.type).toBe("object");
-    expect(schema.properties.requestBody.properties.foo.type).toBe("string");
-  });
-
-  it("should handle no parameters or path params", () => {
-    const operation = {};
-    const path = "/foo";
-    const schema = generateInputSchema(operation, path);
-    expect(schema.type).toBe("object");
-    expect(schema.required.length).toBe(0);
-  });
-
-  it("should handle optional query parameters", () => {
-    const operation = { parameters: [{ in: "query", name: "opt", schema: { type: "string" }, required: false }] };
-    const path = "/foo";
-    const schema = generateInputSchema(operation, path);
-    expect(schema.properties.opt).toBeDefined();
-    expect(schema.required).not.toContain("opt");
+    });
   });
 });

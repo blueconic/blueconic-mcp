@@ -3,12 +3,15 @@
   "name": "blueconic-mcp",
   "display_name": "BlueConic",
   "version": "1.0.0",
-  "description": "Connect Claude to your BlueConic CDP to explore segments, profiles, connections, dialogues, and more.",
-  "long_description": "Access your BlueConic Customer Data Platform directly from Claude. Query segments, browse profiles, inspect connections, view dialogues, explore lifecycle stages, and analyze your customer data — all through natural conversation.",
+  "description": "Connect Claude to your BlueConic CDP and explore tenant data through dynamically generated MCP tools.",
+  "long_description": "BlueConic MCP runs locally, loads your tenant's OpenAPI specification at startup, and exposes BlueConic's read-only GET endpoints as MCP tools. The same codebase also works with Cursor, VS Code, and other stdio-based MCP clients.",
   "author": {
     "name": "BlueConic",
-    "url": "https://github.com/blueconic"
+    "url": "https://www.blueconic.com"
   },
+  "homepage": "https://www.blueconic.com",
+  "documentation": "https://support.blueconic.com/en/articles/415706-blueconic-mcp-client-for-ai-coding-assistants",
+  "support": "https://support.blueconic.com",
   "icon": "icon.png",
   "icons": [
     {
@@ -25,35 +28,23 @@
   "privacy_policies": [
     "https://www.blueconic.com/privacy-policy"
   ],
-  "user_config": {
-    "tenant_url": {
-      "type": "string",
-      "title": "BlueConic Tenant URL",
-      "description": "Your BlueConic tenant URL (e.g. https://your-tenant.blueconic.net)",
-      "required": true
-    },
-    "client_id": {
-      "type": "string",
-      "title": "OAuth Client ID",
-      "description": "Client ID from BlueConic Settings > Access Management > Applications",
-      "sensitive": true,
-      "required": true
-    },
-    "client_secret": {
-      "type": "string",
-      "title": "OAuth Client Secret",
-      "description": "Client Secret from BlueConic Settings > Access Management > Applications",
-      "sensitive": true,
-      "required": true
-    }
-  },
+  "keywords": [
+    "blueconic",
+    "cdp",
+    "mcp",
+    "openapi",
+    "segments",
+    "profiles"
+  ],
+  "license": "SEE LICENSE IN LICENSE",
+  "tools_generated": true,
   "server": {
     "type": "node",
-    "entry_point": "dist/client-side-server.js",
+    "entry_point": "server/index.mjs",
     "mcp_config": {
       "command": "node",
       "args": [
-        "${__dirname}/dist/client-side-server.js"
+        "${__dirname}/server/index.mjs"
       ],
       "env": {
         "BLUECONIC_TENANT_URL": "${user_config.tenant_url}",
@@ -62,13 +53,37 @@
       }
     }
   },
-  "tools": [],
+  "user_config": {
+    "tenant_url": {
+      "type": "string",
+      "title": "BlueConic Tenant URL",
+      "description": "Your BlueConic tenant URL, for example https://your-tenant.blueconic.net",
+      "required": true
+    },
+    "client_id": {
+      "type": "string",
+      "title": "OAuth Client ID",
+      "description": "Client ID from BlueConic Settings > Access management > Applications",
+      "sensitive": true,
+      "required": true
+    },
+    "client_secret": {
+      "type": "string",
+      "title": "OAuth Client Secret",
+      "description": "Client secret from BlueConic Settings > Access management > Applications",
+      "sensitive": true,
+      "required": true
+    }
+  },
   "compatibility": {
-    "claude_desktop": ">=0.10.0",
+    "claude_desktop": ">=1.0.0",
     "platforms": [
       "darwin",
       "win32",
       "linux"
-    ]
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
   }
 }

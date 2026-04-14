@@ -1,14 +1,36 @@
 import tseslint from "@typescript-eslint/eslint-plugin";
 import tsparser from "@typescript-eslint/parser";
 
+/**
+ * ESLint configuration for BlueConic MCP Server
+ */
 export default [
   {
-    files: ["src/**/*.ts"],
+    files: ["src/**/*.ts", "scripts/**/*.mjs"],
     languageOptions: {
       parser: tsparser,
       parserOptions: {
         ecmaVersion: 2023,
         sourceType: "module"
+      },
+      ecmaVersion: 2023,
+      sourceType: "module",
+      globals: {
+        console: "readonly",
+        process: "readonly",
+        Buffer: "readonly",
+        fetch: "readonly",
+        global: "readonly",
+        __dirname: "readonly",
+        __filename: "readonly",
+        clearImmediate: "readonly",
+        clearInterval: "readonly",
+        clearTimeout: "readonly",
+        setImmediate: "readonly",
+        setInterval: "readonly",
+        setTimeout: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly"
       }
     },
     plugins: {
@@ -23,13 +45,15 @@ export default [
       "no-trailing-spaces": "error",
       "eol-last": "error",
 
-      // Use TS-aware versions of these rules
+      // Variables
       "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
       "no-redeclare": "off",
       "@typescript-eslint/no-redeclare": "error",
+      "no-undef": "off",
 
       // Functions
       "no-unreachable": "error",
+      "consistent-return": "error",
       "no-return-assign": "error",
 
       // Objects and arrays
@@ -50,6 +74,7 @@ export default [
       "template-curly-spacing": "error",
 
       // Async/await
+      "require-await": "error",
       "no-async-promise-executor": "error",
 
       // Error handling
@@ -73,12 +98,21 @@ export default [
       parserOptions: {
         ecmaVersion: 2023,
         sourceType: "module"
+      },
+      globals: {
+        describe: "readonly",
+        it: "readonly",
+        test: "readonly",
+        expect: "readonly",
+        beforeAll: "readonly",
+        afterAll: "readonly",
+        beforeEach: "readonly",
+        afterEach: "readonly",
+        jest: "readonly"
       }
     },
-    plugins: {
-      "@typescript-eslint": tseslint
-    },
     rules: {
+      // Test-specific rules
       "no-unused-expressions": "off"
     }
   }

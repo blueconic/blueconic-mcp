@@ -1,77 +1,112 @@
 # BlueConic MCP
 
-A client-side MCP server that dynamically exposes **all** BlueConic REST API endpoints for use with AI assistants including Claude Desktop, Cursor, and VS Code GitHub Copilot.
+BlueConic MCP is a local MCP server that loads a BlueConic tenant's OpenAPI specification at startup and turns the tenant's read-only `GET` endpoints into MCP tools. This repository supports:
 
-More information can be found on the support documentation: https://support.blueconic.com/en/articles/415706-blueconic-mcp-client-for-ai-coding-assistants.
+- Claude Desktop through a packaged `.mcpb` connector
+- Standard stdio MCP clients such as Cursor, VS Code, and other MCP-capable tools
+- Local development from TypeScript source under `src/`
 
-## IMPORTANT NOTE ##
+More information is available in the BlueConic support docs:
+https://support.blueconic.com/en/articles/415706-blueconic-mcp-client-for-ai-coding-assistants
 
-Opening up your BlueConic tenant with MCP can be dangerous, as you need to trust the model to use it in a sensible and safe manner. If used incorrectly, it could lead to sensitive data being leaked.
-Make sure that the MCP host you're using, doesn't use the MCP context for training their models!
+## Security
 
-## Multi-Tenant SaaS ✨
+Opening a BlueConic tenant to any MCP client can expose sensitive data if the model is used carelessly. Only connect this server to AI tools you trust, and make sure the host application is configured in a way that matches your security and data-handling requirements.
 
-- 🏢 **No server deployment** - Each user runs locally
-- 🔄 **Dynamic API discovery** - Auto-loads from tenant's OpenAPI spec
-- 🔐 **Per-user credentials** - Each user uses their own OAuth tokens
-- 🚀 **Instant setup** - Works with any BlueConic tenant
-- 📡 **All APIs exposed** - Every endpoint in your OpenAPI spec becomes available
+## Project Layout
+
+```text
+src/
+  client-side-server.ts
+  api-client.ts
+  auth.ts
+  openapi-tools.ts
+  __tests__/
+scripts/
+  build-mcpb.mjs
+  check-mcpb-bundle.mjs
+manifest.json
+.mcpbignore
+```
+
+`src/` is the source of truth for development and the npm package build. `server/index.mjs` is generated only for Claude Desktop bundling and is intentionally excluded from git.
 
 ## Quick Start
 
-### 1. Install Dependencies
-
-Make sure Node.js (>= 22.x) is installed, along with NPM (node package manager).
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-### 2. Configure Your Tenant
+Set your BlueConic credentials for local stdio development:
 
 ```bash
-# Your BlueConic tenant
 export BLUECONIC_TENANT_URL="https://yourtenant.blueconic.net"
-
-# Your OAuth app credentials
 export OAUTH_CLIENT_ID="your_client_id"
 export OAUTH_CLIENT_SECRET="your_client_secret"
 
-# For development with self-signed certs
+# Optional for development against self-signed certificates
 export NODE_TLS_REJECT_UNAUTHORIZED="0"
 ```
 
-### 3. Run the MCP Server
+Run from source:
 
 ```bash
 npm start
 ```
 
-You should see:
+Common development commands:
+
+```bash
+npm run build
+npm test
+npm run validate:mcpb
+npm run pack:mcpb
 ```
-Loading OpenAPI spec from: https://yourtenant.blueconic.net/rest/v2/openapi.json?prettyPrint=true
-Loaded 24 API endpoints as MCP tools
-BlueConic Dynamic MCP Server started successfully (version: xxx)
+
+`npm test` runs both the TypeScript unit tests and a Claude Desktop bundle regression check.
+
+## Claude Desktop
+
+The repo includes a Claude Desktop `manifest.json` using the current MCPB schema. Claude's secure `user_config` fields map onto the same environment variables used by the stdio server.
+
+Build and validate the Claude bundle:
+
+```bash
+npm run validate:mcpb
 ```
 
-## Integration with AI Tools
+Create the installable connector:
 
-### Claude Desktop (Desktop Extension)
+```bash
+npm run pack:mcpb
+```
 
-Install directly from the Claude Connectors Directory:
+This generates `dist/blueconic-mcp.mcpb`.
 
-1. Open Claude Desktop
-2. Go to **Settings > Connectors > Browse Connectors > Desktop Extensions**
-3. Search for **BlueConic** and click **Install**
-4. Enter your BlueConic tenant URL, OAuth Client ID, and Client Secret when prompted
+Install flow:
 
-Alternatively, install from a `.mcpb` bundle file by dragging it into the Claude Desktop window.
+1. Build the bundle with `npm run pack:mcpb`.
+2. Install `dist/blueconic-mcp.mcpb` in Claude Desktop.
+3. Enter your tenant URL, client ID, and client secret when Claude prompts for connector configuration.
+4. Reinstall the `.mcpb` after each connector rebuild so Claude picks up the new bundle.
 
-### Cursor
+The Claude packaging flow stays intentionally small:
 
-Add to your Cursor settings (`.cursor/mcp.json`):
+- `server/index.mjs` is a single generated runtime bundle
+- `.mcpbignore` removes source, tests, docs, configs, dev dependencies, and local artifacts
+- The packaged connector ships only `manifest.json`, `icon.png`, `icon-dark.png`, `package.json`, and `server/index.mjs`
 
-When using the NPM package:
+`npm run check:mcpb` is the fast regression guard for the Claude runtime. It verifies that:
+
+- the generated bundle does not include the unsupported dynamic-require shim
+- startup reaches the expected credential validation path instead of crashing during module load
+- `.mcpbignore` does not exclude `package.json`, which the runtime reads for the connector version
+
+## Cursor
+
+Add this to `.cursor/mcp.json` when using the published npm package:
 
 ```json
 {
@@ -89,16 +124,16 @@ When using the NPM package:
 }
 ```
 
-For local development:
+For local development from source:
 
 ```json
 {
   "mcpServers": {
     "blueconic": {
-			"command": "npx",
-			"args": [
+      "command": "npx",
+      "args": [
         "tsx",
-        "/path/to/blueconic-mcp-client/client-side-server.ts"
+        "/path/to/blueconic-mcp/src/client-side-server.ts"
       ],
       "env": {
         "BLUECONIC_TENANT_URL": "https://yourtenant.blueconic.net",
@@ -110,9 +145,9 @@ For local development:
 }
 ```
 
-### VS Code GitHub Copilot
+## VS Code GitHub Copilot
 
-Add to your VS Code settings. When using the NPM package:
+Add this to your MCP server settings when using the npm package:
 
 ```json
 {
@@ -129,196 +164,53 @@ Add to your VS Code settings. When using the NPM package:
       }
     }
   },
-  "inputs": [{
+  "inputs": [
+    {
       "type": "promptString",
       "id": "blueconic-tenant-url",
-      "description": "BlueConic tenant URL, e.g. https://mytenant.blueconic.net",
+      "description": "BlueConic tenant URL, for example https://mytenant.blueconic.net",
       "password": false
-    }, {
+    },
+    {
       "type": "promptString",
       "id": "blueconic-oauth2-client-id",
-      "description": "BlueConic OAuth2.0 Client ID",
+      "description": "BlueConic OAuth 2.0 Client ID",
       "password": true
-    },{
+    },
+    {
       "type": "promptString",
       "id": "blueconic-oauth2-client-secret",
-      "description": "BlueConic OAuth2.0 Client secret",
+      "description": "BlueConic OAuth 2.0 Client secret",
       "password": true
-    }]
-}
-```
-
-For local development:
-
-```json
-{
-  "servers": {
-    "blueconic": {
-      "name": "BlueConic MCP Server",
-      "description": "BlueConic MCP Server",
-			"command": "npx",
-			"args": [
-        "tsx",
-        "/path/to/blueconic-mcp-client/client-side-server.ts"
-      ],
-      "env": {
-        "BLUECONIC_TENANT_URL": "${input:blueconic-tenant-url}",
-        "OAUTH_CLIENT_ID": "${input:blueconic-oauth2-client-id}",
-        "OAUTH_CLIENT_SECRET": "${input:blueconic-oauth2-client-secret}"
-      }
     }
-  },
-  "inputs": [{
-      "type": "promptString",
-      "id": "blueconic-tenant-url",
-      "description": "BlueConic tenant URL, e.g. https://mytenant.blueconic.net",
-      "password": false
-    }, {
-      "type": "promptString",
-      "id": "blueconic-oauth2-client-id",
-      "description": "BlueConic OAuth2.0 Client ID",
-      "password": true
-    },{
-      "type": "promptString",
-      "id": "blueconic-oauth2-client-secret",
-      "description": "BlueConic OAuth2.0 Client secret",
-      "password": true
-    }]
+  ]
 }
 ```
 
-## Available Tools (Dynamic)
+For local development, point the command to `src/client-side-server.ts` in the same way as the Cursor example.
 
-The server automatically discovers and exposes **ALL** API endpoints from your tenant's OpenAPI specification, such as:
+## Behavior
 
-- `/segments` - Retrieve all segments
-- `/profiles` - Search profiles
-- `/profiles/{profileId}` - Get one profile by ID
-- `/segments/{segment}/profiles` - Get profiles from a segemnt
-- And many more...
+- The server discovers tools dynamically from the tenant's OpenAPI specification at startup.
+- Only read-only `GET` endpoints are exposed as tools.
+- OAuth tokens are cached in memory and refreshed automatically before expiration.
+- Responses are returned as formatted JSON when possible, with text or base64 fallbacks for non-JSON payloads.
 
-## Example Usage
+## BlueConic Credentials
 
-Once configured, you can ask your AI assistant:
+To create a suitable OAuth client in BlueConic:
 
-- *"Get all segments from my BlueConic tenant"*
-- *"Show me profiles in the 'high-value-customers' segment"*
-- *"Can you retrieve 1000 profiles from the allvisitors segment and tell me what stands out"*
+1. Log into your BlueConic tenant.
+2. Go to `Settings > Access management > Applications`.
+3. Create an application using the client credentials flow.
+4. Grant the read scopes you need.
+5. Copy the client ID and client secret into your MCP configuration.
 
-The AI will automatically use the appropriate API endpoint with your credentials.
+Typical read scopes include:
 
-## Security Features
+- `read:segments`
+- `read:profiles`
+- `read:connections`
+- `read:interactions`
 
-✅ **Client-side only** - No server infrastructure needed
-✅ **Per-user credentials** - Each user's own OAuth tokens (Per BlueConic Application)
-✅ **Dynamic scopes** - Uses whatever permissions the user's OAuth app has
-✅ **Token caching** - Automatic refresh when tokens expire
-✅ **Input validation** - Sanitizes all API parameters
-✅ **HTTPS only** - Secure communication with your tenant
-
-### Option A: Direct Installation
-Users clone this repository and configure locally.
-
-### Option B: NPM Package
-Publish as a global package:
-
-```bash
-npm install -g @blueconic/blueconic-mcp
-blueconic-mcp --tenant https://yourtenant.blueconic.net
-```
-
-## For BlueConic Customers
-
-### Getting Your OAuth Credentials
-
-1. Log into your BlueConic tenant
-2. Navigate to **Settings > Access management > Applications**
-3. Create a new application with "client credentials" and enable it
-4. Grant the scopes you need (e.g., `read:segments`, `read:profiles`)
-5. Copy the **Client ID** and **Client Secret**
-6. Use these in your MCP configuration
-
-### Required OAuth Scopes
-
-The adapter works with any scopes your read OAuth application has.
-Write scopes are not supported yet.
-
-- `read:segments` - For segment operations
-- `read:profiles` - For profile data
-- `read:connections` - For connection management
-- `read:interactions` - For interaction data
-
-## Architecture
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Cursor/VS     │◄───┤  MCP Client     │◄───┤ BlueConic       │
-│   Code Copilot  │    │  (Local)        │    │ Tenant API      │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                              │
-                              ▼
-                       ┌─────────────────┐
-                       │ OpenAPI Spec    │
-                       │ Auto-Discovery  │
-                       └─────────────────┘
-```
-
-## Troubleshooting
-
-### OpenAPI Spec Not Loading
-- Verify your `BLUECONIC_TENANT_URL` is correct
-- Check that `/rest/v2/openapi.json` is accessible
-- Ensure network connectivity to your tenant
-
-### OAuth Authentication Failed
-- Verify client credentials are correct
-- Check OAuth app has required scopes enabled
-- Ensure token endpoint is accessible
-
-### No Tools Appearing in AI Assistant
-- Check server startup logs for errors
-- Verify OpenAPI spec loaded successfully
-- Restart Cursor/VS Code after configuration changes
-
-## Usage Examples
-
-**Explore your segments:**
-> "List all segments in my BlueConic tenant and show me which ones have the most profiles."
-
-**Analyze customer profiles:**
-> "Get 100 profiles from the 'high-value-customers' segment and summarize the common attributes."
-
-**Inspect connections and data flows:**
-> "Show me all connections in my tenant and their recent run history. Are any failing?"
-
-**Review dialogues and interactions:**
-> "What dialogues are currently active? Show me the statistics for the top 3 by impressions."
-
-**Audit tenant configuration:**
-> "List all lifecycle stages and tell me how they're structured. Are there any that seem unused?"
-
-## Packaging as Desktop Extension
-
-To build a `.mcpb` bundle for Claude Desktop:
-
-```bash
-npm run pack
-```
-
-This compiles TypeScript and packages everything into a `.mcpb` file that can be installed in Claude Desktop.
-
-## Privacy Policy
-
-This MCP server runs entirely on your local machine. Your BlueConic credentials (tenant URL, client ID, client secret) are stored securely in your OS keychain when installed as a Claude Desktop Extension and are never transmitted to any third party. API calls are made directly from your machine to your BlueConic tenant. No data is collected, stored, or shared by this extension.
-
-For BlueConic's privacy policy, see: https://www.blueconic.com/privacy-policy
-
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
-## Support
-
-- Documentation: https://support.blueconic.com/en/articles/415706-blueconic-mcp-client-for-ai-coding-assistants
-- Issues: Report via your BlueConic support channel
-- NPM Package: https://www.npmjs.com/package/@blueconic/blueconic-mcp
+Write scopes are not exposed by this MCP server today.

@@ -1,10 +1,9 @@
 import { makeApiCall } from "../api-client.js";
 
 describe("makeApiCall", () => {
-  it("should throw error for missing token", async () => {
+  it("throws when the OAuth token is missing", async () => {
     await expect(
-      makeApiCall("https://example.com", "", "GET", "/test", "0.0.1")
-    ).rejects.toThrow();
+      makeApiCall("https://example.com", "", "GET", "/segments", "1.0.0")
+    ).rejects.toThrow("OAuth access token not configured");
   });
-  // Add more tests as needed, e.g., for path/query params, requestBody, etc.
 });

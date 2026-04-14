@@ -64,6 +64,7 @@ Thumbs.db
 dist/
 build/
 *.mcpb
+server/
 
 # Test artifacts
 test-results/

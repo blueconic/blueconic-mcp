@@ -1,92 +1,130 @@
-let tools: any[] = [];
+import { fetch } from "./http.js";
 
-/** Load OpenAPI specification from the user's tenant */
-export async function loadOpenApiSpec(tenantUrl?: string, version?: string): Promise<void> {
-  if (!tenantUrl) return;
-  const OPENAPI_SPEC_URL = `${tenantUrl}/rest/v2/openapi.json?prettyPrint=true`;
+export type InputSchema = {
+  properties: Record<string, Record<string, unknown>>;
+  required: string[];
+  type: "object";
+};
 
-  try {
-    console.error(`Loading OpenAPI spec from: ${OPENAPI_SPEC_URL}`);
+type OpenApiParameter = {
+  description?: string;
+  in?: string;
+  name: string;
+  required?: boolean;
+  schema?: {
+    items?: Record<string, unknown>;
+    type?: string;
+  };
+};
 
-    const response = await fetch(OPENAPI_SPEC_URL, {
-      headers: {
-        "Accept": "application/json",
-        "User-Agent": `BlueConic-MCP-Client/${version}`
-      }
-    });
+type OpenApiOperation = {
+  description?: string;
+  operationId?: string;
+  parameters?: OpenApiParameter[];
+  requestBody?: {
+    content?: Record<string, { schema?: Record<string, unknown> }>;
+  };
+  summary?: string;
+};
 
-    if (!response.ok) {
-      throw new Error(`Failed to load OpenAPI spec: ${response.status} ${response.statusText}`);
-    }
+type OpenApiSpec = {
+  paths?: Record<string, Record<string, OpenApiOperation>>;
+};
 
-    const openApiSpec = await response.json() as any;
-    generateToolsFromSpec(openApiSpec);
+export type DynamicTool = {
+  annotations: {
+    destructiveHint: boolean;
+    idempotentHint: boolean;
+    openWorldHint: boolean;
+    readOnlyHint: boolean;
+  };
+  description: string;
+  inputSchema: InputSchema;
+  method: string;
+  name: string;
+  path: string;
+};
 
-    console.error(`Loaded ${tools.length} API endpoints as MCP tools`);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("Failed to load OpenAPI spec:", message);
-    throw error;
-  }
-}
+export let tools: DynamicTool[] = [];
 
-/** Generate MCP tools from OpenAPI specification. */
-function generateToolsFromSpec(openApiSpec: any): void {
-  tools = [];
-
-  if (!openApiSpec || !openApiSpec.paths) {
+/** Load the OpenAPI specification from the user's tenant. */
+export async function loadOpenApiSpec(tenantUrl?: string, version = "0.0.0"): Promise<void> {
+  if (!tenantUrl) {
     return;
   }
 
-  for (const [path, pathObj] of Object.entries(openApiSpec.paths)) {
-    for (const [method, operation] of Object.entries(pathObj as any)) {
-      const op = operation as any;
-      if (!["get"].includes(method.toLowerCase())) {
+  const openApiSpecUrl = new URL("/rest/v2/openapi.json?prettyPrint=true", `${tenantUrl}/`);
+  console.error(`Loading OpenAPI spec from: ${openApiSpecUrl.toString()}`);
+
+  const response = await fetch(openApiSpecUrl, {
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": `BlueConic-MCP-Client/${version}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to load OpenAPI spec: ${response.status} ${response.statusText}`);
+  }
+
+  const openApiSpec = await response.json() as OpenApiSpec;
+  generateToolsFromSpec(openApiSpec);
+
+  console.error(`Loaded ${tools.length} API endpoints as MCP tools`);
+}
+
+function generateToolsFromSpec(openApiSpec: OpenApiSpec): void {
+  tools = [];
+
+  if (!openApiSpec.paths) {
+    return;
+  }
+
+  for (const [path, pathDefinition] of Object.entries(openApiSpec.paths)) {
+    for (const [method, operation] of Object.entries(pathDefinition)) {
+      if (method.toLowerCase() !== "get") {
         continue;
       }
 
-      const toolName = generateToolName(method, path, op);
-      const tool = {
-        name: toolName,
-        description: op.summary || op.description || `${method.toUpperCase()} ${path}`,
-        inputSchema: generateInputSchema(op, path),
+      tools.push({
         annotations: {
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
           openWorldHint: false
-        }
-      };
-
-      tools.push({
-        ...tool,
+        },
+        description: operation.summary || operation.description || `${method.toUpperCase()} ${path}`,
+        inputSchema: generateInputSchema(operation, path, method),
         method: method.toUpperCase(),
-        path: path,
-        operation: op
+        name: generateToolName(method, path, operation),
+        path
       });
     }
   }
 }
 
-/** Generate a unique tool name from method and path. */
-function generateToolName(method: string, path: string, operation: any): string {
+function generateToolName(method: string, path: string, operation: OpenApiOperation): string {
   if (operation.operationId) {
     return operation.operationId;
   }
 
-  // path examples: /auditEvents or /channels/{channelId}
   const cleanPath = path
     .replace(/\{([^}]+)\}/g, "by_$1")
-    .replace(/[\/\-]/g, "_")
+    .replace(/[\/-]/g, "_")
     .replace(/^_+|_+$/g, "")
     .toLowerCase();
 
   return `${method.toLowerCase()}_${cleanPath}`;
 }
 
-/** Generate input schema for a tool based on OpenAPI operation. */
-export function generateInputSchema(operation: any, path: string): any {
-  const schema: any = {
+/** Generate the input schema for an MCP tool from an OpenAPI operation. */
+export function generateInputSchema(
+  operation: OpenApiOperation,
+  path: string,
+  method?: string
+): InputSchema {
+  const required = new Set<string>();
+  const schema: InputSchema = {
     type: "object",
     properties: {},
     required: []
@@ -94,34 +132,36 @@ export function generateInputSchema(operation: any, path: string): any {
 
   const pathParams = path.match(/\{([^}]+)\}/g);
   if (pathParams) {
-    pathParams.forEach(param => {
-      const paramName = param.slice(1, -1);
+    for (const pathParam of pathParams) {
+      const paramName = pathParam.slice(1, -1);
       schema.properties[paramName] = {
         type: "string",
         description: `Path parameter: ${paramName}`
       };
-      schema.required.push(paramName);
-    });
+      required.add(paramName);
+    }
   }
 
-  if (operation.parameters) {
-    operation.parameters.forEach((param: any) => {
-      if (param.in === "query") {
-        schema.properties[param.name] = {
-          type: param.schema?.type || "string",
-          description: param.description
-        };
-        if (param.schema?.type === "array") {
-          schema.properties[param.name].items = param.schema.items || { type: "string" };
-        }
-        if (param.required) {
-          schema.required.push(param.name);
-        }
-      }
-    });
+  for (const parameter of operation.parameters ?? []) {
+    if (parameter.in !== "query") {
+      continue;
+    }
+
+    schema.properties[parameter.name] = {
+      type: parameter.schema?.type || "string",
+      description: parameter.description
+    };
+
+    if (parameter.schema?.type === "array") {
+      schema.properties[parameter.name].items = parameter.schema.items || { type: "string" };
+    }
+
+    if (parameter.required) {
+      required.add(parameter.name);
+    }
   }
 
-  if (operation.requestBody && ["POST", "PUT", "PATCH"].includes(operation.method)) {
+  if (operation.requestBody && method && ["post", "put", "patch"].includes(method.toLowerCase())) {
     const jsonContent = operation.requestBody.content?.["application/json"];
     if (jsonContent?.schema) {
       schema.properties.requestBody = {
@@ -132,7 +172,6 @@ export function generateInputSchema(operation: any, path: string): any {
     }
   }
 
+  schema.required = [...required];
   return schema;
 }
-
-export { tools };
