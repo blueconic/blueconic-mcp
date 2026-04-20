@@ -1,4 +1,5 @@
 import { fetch } from "./http.js";
+import { BlueConicConfigError, BlueConicHttpError } from "./errors.js";
 
 export type QueryParamScalar = boolean | number | string;
 export type QueryParamValue = QueryParamScalar | QueryParamScalar[];
@@ -29,7 +30,7 @@ export async function makeApiCall(
   requestBody: unknown = null
 ): Promise<unknown> {
   if (!token) {
-    throw new Error("OAuth access token not configured");
+    throw new BlueConicConfigError("OAuth access token not configured");
   }
 
   let finalPath = path;
@@ -62,7 +63,12 @@ export async function makeApiCall(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`API call failed: ${response.status} ${response.statusText}. ${errorText}`);
+    throw new BlueConicHttpError("BlueConic API request failed", {
+      operation: `${method} ${finalPath}`,
+      responseBody: errorText,
+      status: response.status,
+      statusText: response.statusText
+    });
   }
 
   const contentType = response.headers.get("content-type") ?? "";

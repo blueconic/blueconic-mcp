@@ -83,12 +83,12 @@ Create the installable connector:
 npm run pack:mcpb
 ```
 
-This generates `dist/blueconic-mcp.mcpb`.
+This generates a versioned `.mcpb` bundle in `dist/`.
 
 Install flow:
 
 1. Build the bundle with `npm run pack:mcpb`.
-2. Install `dist/blueconic-mcp.mcpb` in Claude Desktop.
+2. Open `dist/` and install the generated `blueconic-mcp-*.mcpb` file in Claude Desktop.
 3. Enter your tenant URL, client ID, and client secret when Claude prompts for connector configuration.
 4. Reinstall the `.mcpb` after each connector rebuild so Claude picks up the new bundle.
 

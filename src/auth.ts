@@ -1,4 +1,5 @@
 import { fetch } from "./http.js";
+import { BlueConicConfigError, BlueConicHttpError } from "./errors.js";
 
 let accessToken: string | null = null;
 let cachedCredentialKey: string | null = null;
@@ -11,7 +12,7 @@ export async function getAccessToken(
   clientSecret: string
 ): Promise<string> {
   if (!tenantUrl || !clientId || !clientSecret) {
-    throw new Error("OAuth credentials or tenant URL not configured");
+    throw new BlueConicConfigError("OAuth credentials or tenant URL not configured");
   }
 
   const credentialKey = `${tenantUrl}::${clientId}`;
@@ -33,7 +34,12 @@ export async function getAccessToken(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`OAuth token request failed: ${response.status} ${response.statusText}. ${errorText}`);
+    throw new BlueConicHttpError("BlueConic OAuth token request failed", {
+      operation: "POST /rest/v2/oauth/token",
+      responseBody: errorText,
+      status: response.status,
+      statusText: response.statusText
+    });
   }
 
   const tokenData = await response.json() as { access_token: string; expires_in?: number };

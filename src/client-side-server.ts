@@ -11,6 +11,7 @@ import {
 
 import { makeApiCall, type QueryParamScalar, type QueryParamValue } from "./api-client.js";
 import { getAccessToken } from "./auth.js";
+import { getClientFacingErrorMessage } from "./errors.js";
 import { loadOpenApiSpec, tools } from "./openapi-tools.js";
 
 const require = createRequire(import.meta.url);
@@ -86,18 +87,28 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     throw new Error("BlueConic MCP server configuration is incomplete");
   }
 
-  if (tools.length === 0) {
-    await loadOpenApiSpec(serverConfig.tenantUrl, packageJson.version);
-  }
+  try {
+    if (tools.length === 0) {
+      await loadOpenApiSpec(serverConfig.tenantUrl, packageJson.version);
+    }
 
-  return {
-    tools: tools.map(({ annotations, description, inputSchema, name }) => ({
-      name,
-      description,
-      inputSchema,
-      annotations
-    }))
-  };
+    return {
+      tools: tools.map(({ annotations, description, inputSchema, name }) => ({
+        name,
+        description,
+        inputSchema,
+        annotations
+      }))
+    };
+  } catch (error: unknown) {
+    console.error("Failed to prepare BlueConic tools:", error);
+    throw new Error(
+      getClientFacingErrorMessage(
+        error,
+        "BlueConic tools are currently unavailable. Please try again later."
+      )
+    );
+  }
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -129,7 +140,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   const args = (request.params.arguments ?? {}) as Record<string, unknown>;
-  console.error(`Executing tool: ${toolName} with args: ${JSON.stringify(args)}`);
+  console.error(`Executing tool: ${toolName}`);
 
   try {
     const token = await getAccessToken(
@@ -180,12 +191,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       ]
     };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    console.error(`BlueConic tool execution failed for ${toolName}:`, error);
     return {
       content: [
         {
           type: "text",
-          text: `Error: ${message}`
+          text: `Error: ${getClientFacingErrorMessage(error)}`
         }
       ],
       isError: true
@@ -215,8 +226,7 @@ async function main(): Promise<void> {
     console.error(`Tenant: ${serverConfig.tenantUrl}`);
     console.error(`Loaded ${tools.length} API endpoints`);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("Failed to start server:", message);
+    console.error("Failed to start server:", error);
     process.exit(1);
   }
 }

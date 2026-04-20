@@ -1,6 +1,6 @@
 {
   "name": "@blueconic/blueconic-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "BlueConic Client-Side MCP Server - Dynamic multi-tenant OpenAPI adapter for providing context to AI models",
   "main": "dist/client-side-server.js",
   "types": "dist/client-side-server.d.ts",
@@ -23,7 +23,7 @@
     "test:mcpb": "npm run build:mcpb && npm run check:mcpb",
     "test": "npm run test:unit && npm run test:mcpb",
     "validate:mcpb": "npm run build:mcpb && npm run check:mcpb && mcpb validate .",
-    "pack:mcpb": "npm run build:mcpb && npm run check:mcpb && mcpb pack . dist/blueconic-mcp.mcpb"
+    "pack:mcpb": "npm run build:mcpb && npm run check:mcpb && node scripts/pack-mcpb.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.18.0"

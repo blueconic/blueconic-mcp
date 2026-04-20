@@ -1,4 +1,5 @@
 import { fetch } from "./http.js";
+import { BlueConicHttpError } from "./errors.js";
 
 export type InputSchema = {
   properties: Record<string, Record<string, unknown>>;
@@ -64,7 +65,13 @@ export async function loadOpenApiSpec(tenantUrl?: string, version = "0.0.0"): Pr
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to load OpenAPI spec: ${response.status} ${response.statusText}`);
+    const errorText = await response.text();
+    throw new BlueConicHttpError("Failed to load OpenAPI spec", {
+      operation: "GET /rest/v2/openapi.json",
+      responseBody: errorText,
+      status: response.status,
+      statusText: response.statusText
+    });
   }
 
   const openApiSpec = await response.json() as OpenApiSpec;
