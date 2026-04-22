@@ -5,10 +5,25 @@ type BlueConicHttpErrorOptions = {
   statusText: string;
 };
 
+export const BLUECONIC_CONFIGURATION_REQUIRED_MESSAGE =
+  "BlueConic requires configuration before it can be used. See the documentation for setup instructions.";
+export const BLUECONIC_TLS_CONFIGURATION_MESSAGE =
+  "BlueConic requires standard TLS certificate verification. Configure a trusted certificate before using this server.";
+
 export class BlueConicConfigError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "BlueConicConfigError";
+  }
+}
+
+export class BlueConicTimeoutError extends Error {
+  readonly timeoutMs: number;
+
+  constructor(timeoutMs: number) {
+    super(`BlueConic request timed out after ${timeoutMs}ms`);
+    this.name = "BlueConicTimeoutError";
+    this.timeoutMs = timeoutMs;
   }
 }
 
@@ -33,7 +48,11 @@ export function getClientFacingErrorMessage(
   fallbackMessage = "BlueConic could not complete this request. Please try again later."
 ): string {
   if (error instanceof BlueConicConfigError) {
-    return "BlueConic is not configured correctly. Please verify the tenant URL and OAuth credentials.";
+    return BLUECONIC_CONFIGURATION_REQUIRED_MESSAGE;
+  }
+
+  if (error instanceof BlueConicTimeoutError) {
+    return "BlueConic timed out while processing the request. Please try again.";
   }
 
   if (error instanceof BlueConicHttpError) {

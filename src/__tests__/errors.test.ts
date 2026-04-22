@@ -1,9 +1,15 @@
-import { BlueConicConfigError, BlueConicHttpError, getClientFacingErrorMessage } from "../errors.js";
+import {
+  BLUECONIC_CONFIGURATION_REQUIRED_MESSAGE,
+  BlueConicConfigError,
+  BlueConicHttpError,
+  BlueConicTimeoutError,
+  getClientFacingErrorMessage
+} from "../errors.js";
 
 describe("getClientFacingErrorMessage", () => {
   it("returns a safe configuration message for config errors", () => {
     expect(getClientFacingErrorMessage(new BlueConicConfigError("raw config detail"))).toBe(
-      "BlueConic is not configured correctly. Please verify the tenant URL and OAuth credentials."
+      BLUECONIC_CONFIGURATION_REQUIRED_MESSAGE
     );
   });
 
@@ -30,6 +36,12 @@ describe("getClientFacingErrorMessage", () => {
 
     expect(getClientFacingErrorMessage(error)).toBe(
       "BlueConic could not process this request. Please review the tool inputs and try again."
+    );
+  });
+
+  it("maps timeout failures to a retryable message", () => {
+    expect(getClientFacingErrorMessage(new BlueConicTimeoutError(30_000))).toBe(
+      "BlueConic timed out while processing the request. Please try again."
     );
   });
 

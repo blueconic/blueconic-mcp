@@ -1,4 +1,4 @@
-import { fetch } from "./http.js";
+import { fetchWithTimeout } from "./http.js";
 import { BlueConicHttpError } from "./errors.js";
 
 export type InputSchema = {
@@ -46,7 +46,55 @@ export type DynamicTool = {
   path: string;
 };
 
+type ApprovedPathPolicy = {
+  annotations: DynamicTool["annotations"];
+  path: string;
+  requiredScopes: readonly string[];
+};
+
 export let tools: DynamicTool[] = [];
+
+const READ_ONLY_TOOL_ANNOTATIONS: DynamicTool["annotations"] = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false
+};
+
+// Anthropic review requires the Claude-callable surface to be explicit.
+// The approved list below matches the read-only BlueConic scopes this connector requests.
+// New BlueConic endpoints do not become tools unless we review and add them here.
+export const APPROVED_PATH_POLICIES: readonly ApprovedPathPolicy[] = [
+  { path: "/connections", annotations: READ_ONLY_TOOL_ANNOTATIONS, requiredScopes: ["read:connections"] },
+  {
+    path: "/connections/{connection}",
+    annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    requiredScopes: ["read:connections"]
+  },
+  {
+    path: "/connections/{connection}/runs",
+    annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    requiredScopes: ["read:connections"]
+  },
+  { path: "/interactions", annotations: READ_ONLY_TOOL_ANNOTATIONS, requiredScopes: ["read:interactions"] },
+  {
+    path: "/profileEvents/{profileId}",
+    annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    requiredScopes: ["read:profiles"]
+  },
+  { path: "/profiles", annotations: READ_ONLY_TOOL_ANNOTATIONS, requiredScopes: ["read:profiles"] },
+  { path: "/profiles/{profileId}", annotations: READ_ONLY_TOOL_ANNOTATIONS, requiredScopes: ["read:profiles"] },
+  { path: "/segments", annotations: READ_ONLY_TOOL_ANNOTATIONS, requiredScopes: ["read:segments"] },
+  {
+    path: "/segments/{segment}/profiles",
+    annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    requiredScopes: ["read:segments"]
+  }
+];
+
+export const APPROVED_READ_SCOPES = [...new Set(
+  APPROVED_PATH_POLICIES.flatMap(({ requiredScopes }) => [...requiredScopes])
+)].sort();
 
 /** Load the OpenAPI specification from the user's tenant. */
 export async function loadOpenApiSpec(tenantUrl?: string, version = "0.0.0"): Promise<void> {
@@ -55,9 +103,9 @@ export async function loadOpenApiSpec(tenantUrl?: string, version = "0.0.0"): Pr
   }
 
   const openApiSpecUrl = new URL("/rest/v2/openapi.json?prettyPrint=true", `${tenantUrl}/`);
-  console.error(`Loading OpenAPI spec from: ${openApiSpecUrl.toString()}`);
+  console.error("Loading BlueConic OpenAPI specification");
 
-  const response = await fetch(openApiSpecUrl, {
+  const response = await fetchWithTimeout(openApiSpecUrl, {
     headers: {
       "Accept": "application/json",
       "User-Agent": `BlueConic-MCP-Client/${version}`
@@ -77,28 +125,67 @@ export async function loadOpenApiSpec(tenantUrl?: string, version = "0.0.0"): Pr
   const openApiSpec = await response.json() as OpenApiSpec;
   generateToolsFromSpec(openApiSpec);
 
-  console.error(`Loaded ${tools.length} API endpoints as MCP tools`);
+  console.error(`Loaded ${tools.length} approved API endpoints as MCP tools`);
 }
 
-function generateToolsFromSpec(openApiSpec: OpenApiSpec): void {
-  tools = [];
+function getApprovedPathPolicy(path: string): ApprovedPathPolicy | undefined {
+  return APPROVED_PATH_POLICIES.find((policy) => policy.path === path);
+}
 
+export function filterApprovedOpenApiSpec(openApiSpec: OpenApiSpec): OpenApiSpec {
   if (!openApiSpec.paths) {
-    return;
+    return {
+      ...openApiSpec,
+      paths: {}
+    };
   }
 
-  for (const [path, pathDefinition] of Object.entries(openApiSpec.paths)) {
+  const filteredPaths = Object.fromEntries(
+    Object.entries(openApiSpec.paths).flatMap(([path, pathDefinition]) => {
+      if (!getApprovedPathPolicy(path)) {
+        return [];
+      }
+
+      const getOperations = Object.fromEntries(
+        Object.entries(pathDefinition).filter(([method]) => method.toLowerCase() === "get")
+      );
+
+      if (Object.keys(getOperations).length === 0) {
+        return [];
+      }
+
+      return [[path, getOperations]];
+    })
+  );
+
+  return {
+    ...openApiSpec,
+    paths: filteredPaths
+  };
+}
+
+export function buildToolsFromSpec(openApiSpec: OpenApiSpec): DynamicTool[] {
+  const dynamicTools: DynamicTool[] = [];
+  const filteredOpenApiSpec = filterApprovedOpenApiSpec(openApiSpec);
+
+  if (!filteredOpenApiSpec.paths) {
+    return dynamicTools;
+  }
+
+  for (const [path, pathDefinition] of Object.entries(filteredOpenApiSpec.paths)) {
+    const approvedPathPolicy = getApprovedPathPolicy(path);
+    if (!approvedPathPolicy) {
+      continue;
+    }
+
     for (const [method, operation] of Object.entries(pathDefinition)) {
       if (method.toLowerCase() !== "get") {
         continue;
       }
 
-      tools.push({
+      dynamicTools.push({
         annotations: {
-          readOnlyHint: true,
-          destructiveHint: false,
-          idempotentHint: true,
-          openWorldHint: false
+          ...approvedPathPolicy.annotations
         },
         description: operation.summary || operation.description || `${method.toUpperCase()} ${path}`,
         inputSchema: generateInputSchema(operation, path, method),
@@ -108,6 +195,12 @@ function generateToolsFromSpec(openApiSpec: OpenApiSpec): void {
       });
     }
   }
+
+  return dynamicTools;
+}
+
+function generateToolsFromSpec(openApiSpec: OpenApiSpec): void {
+  tools = buildToolsFromSpec(openApiSpec);
 }
 
 function generateToolName(method: string, path: string, operation: OpenApiOperation): string {

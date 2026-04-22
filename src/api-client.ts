@@ -1,9 +1,9 @@
-import { fetch } from "./http.js";
+import { fetchWithTimeout } from "./http.js";
 import { BlueConicConfigError, BlueConicHttpError } from "./errors.js";
 
 export type QueryParamScalar = boolean | number | string;
 export type QueryParamValue = QueryParamScalar | QueryParamScalar[];
-type FetchOptions = Parameters<typeof fetch>[1];
+type FetchOptions = Parameters<typeof fetchWithTimeout>[1];
 
 function appendQueryParams(url: URL, queryParams: Record<string, QueryParamValue>): void {
   for (const [key, value] of Object.entries(queryParams)) {
@@ -58,8 +58,8 @@ export async function makeApiCall(
     fetchOptions.body = JSON.stringify(requestBody);
   }
 
-  console.error(`Making ${method} request to: ${url.toString()}`);
-  const response = await fetch(url, fetchOptions);
+  console.error(`Making ${method} request to BlueConic endpoint ${path}`);
+  const response = await fetchWithTimeout(url, fetchOptions);
 
   if (!response.ok) {
     const errorText = await response.text();

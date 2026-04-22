@@ -11,8 +11,14 @@ import {
 
 import { makeApiCall, type QueryParamScalar, type QueryParamValue } from "./api-client.js";
 import { getAccessToken } from "./auth.js";
-import { getClientFacingErrorMessage } from "./errors.js";
+import {
+  BLUECONIC_CONFIGURATION_REQUIRED_MESSAGE,
+  BLUECONIC_TLS_CONFIGURATION_MESSAGE,
+  getClientFacingErrorMessage
+} from "./errors.js";
+import { logError } from "./logging.js";
 import { loadOpenApiSpec, tools } from "./openapi-tools.js";
+import { createLazyLoadGuard } from "./tool-loader.js";
 
 const require = createRequire(import.meta.url);
 const packageJson = require("../package.json") as { version: string };
@@ -48,6 +54,22 @@ function readServerConfig(): ServerConfig | null {
   };
 }
 
+function isInsecureTlsBypassEnabled(): boolean {
+  return process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0";
+}
+
+function getRuntimeValidationMessage(): string | null {
+  if (isInsecureTlsBypassEnabled()) {
+    return BLUECONIC_TLS_CONFIGURATION_MESSAGE;
+  }
+
+  if (!serverConfig) {
+    return BLUECONIC_CONFIGURATION_REQUIRED_MESSAGE;
+  }
+
+  return null;
+}
+
 function coerceQueryParamScalar(value: unknown): QueryParamScalar {
   if (typeof value === "boolean" || typeof value === "number" || typeof value === "string") {
     return value;
@@ -69,6 +91,10 @@ function formatToolResult(result: unknown): string {
 }
 
 const serverConfig = readServerConfig();
+const ensureOpenApiToolsLoaded = createLazyLoadGuard(
+  () => tools.length > 0,
+  () => loadOpenApiSpec(serverConfig?.tenantUrl, packageJson.version)
+);
 
 const server = new Server(
   {
@@ -83,14 +109,17 @@ const server = new Server(
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
+  const runtimeValidationMessage = getRuntimeValidationMessage();
+  if (runtimeValidationMessage) {
+    throw new Error(runtimeValidationMessage);
+  }
+
   if (!serverConfig) {
-    throw new Error("BlueConic MCP server configuration is incomplete");
+    throw new Error(BLUECONIC_CONFIGURATION_REQUIRED_MESSAGE);
   }
 
   try {
-    if (tools.length === 0) {
-      await loadOpenApiSpec(serverConfig.tenantUrl, packageJson.version);
-    }
+    await ensureOpenApiToolsLoaded();
 
     return {
       tools: tools.map(({ annotations, description, inputSchema, name }) => ({
@@ -101,7 +130,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       }))
     };
   } catch (error: unknown) {
-    console.error("Failed to prepare BlueConic tools:", error);
+    logError("Failed to prepare BlueConic tools", error);
     throw new Error(
       getClientFacingErrorMessage(
         error,
@@ -112,12 +141,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  if (!serverConfig) {
+  const runtimeValidationMessage = getRuntimeValidationMessage();
+  if (runtimeValidationMessage) {
     return {
       content: [
         {
           type: "text",
-          text: "Error: Missing required BlueConic credentials"
+          text: runtimeValidationMessage
+        }
+      ],
+      isError: true
+    };
+  }
+
+  const currentServerConfig = serverConfig;
+  if (!currentServerConfig) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: BLUECONIC_CONFIGURATION_REQUIRED_MESSAGE
         }
       ],
       isError: true
@@ -132,7 +175,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       content: [
         {
           type: "text",
-          text: `Error: Unknown tool: ${toolName}`
+          text: "The requested BlueConic tool is unavailable."
         }
       ],
       isError: true
@@ -144,9 +187,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     const token = await getAccessToken(
-      serverConfig.tenantUrl,
-      serverConfig.clientId,
-      serverConfig.clientSecret
+      currentServerConfig.tenantUrl,
+      currentServerConfig.clientId,
+      currentServerConfig.clientSecret
     );
 
     const pathParams: Record<string, string> = {};
@@ -172,7 +215,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     const result = await makeApiCall(
-      serverConfig.tenantUrl,
+      currentServerConfig.tenantUrl,
       token,
       tool.method,
       tool.path,
@@ -191,12 +234,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       ]
     };
   } catch (error: unknown) {
-    console.error(`BlueConic tool execution failed for ${toolName}:`, error);
+    logError(`BlueConic tool execution failed for ${toolName}`, error);
     return {
       content: [
         {
           type: "text",
-          text: `Error: ${getClientFacingErrorMessage(error)}`
+          text: getClientFacingErrorMessage(error)
         }
       ],
       isError: true
@@ -205,28 +248,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 async function main(): Promise<void> {
+  const runtimeValidationMessage = getRuntimeValidationMessage();
+  if (runtimeValidationMessage) {
+    console.error(runtimeValidationMessage);
+    process.exit(1);
+  }
+
   if (!serverConfig) {
-    console.error("Error: Missing required environment variables");
-    console.error("Please set:");
-    console.error("  BLUECONIC_TENANT_URL=https://tenant1.blueconic.net");
-    console.error("  OAUTH_CLIENT_ID=your_client_id");
-    console.error("  OAUTH_CLIENT_SECRET=your_client_secret");
-    console.error("Optional:");
-    console.error("  NODE_TLS_REJECT_UNAUTHORIZED=0 (for self-signed certs in development)");
+    console.error(BLUECONIC_CONFIGURATION_REQUIRED_MESSAGE);
     process.exit(1);
   }
 
   try {
-    await loadOpenApiSpec(serverConfig.tenantUrl, packageJson.version);
+    await ensureOpenApiToolsLoaded();
 
     const transport = new StdioServerTransport();
     await server.connect(transport);
 
     console.error(`BlueConic MCP server started successfully (version: ${packageJson.version})`);
-    console.error(`Tenant: ${serverConfig.tenantUrl}`);
-    console.error(`Loaded ${tools.length} API endpoints`);
+    console.error(`Loaded ${tools.length} approved API endpoints`);
   } catch (error: unknown) {
-    console.error("Failed to start server:", error);
+    logError("Failed to start server", error);
     process.exit(1);
   }
 }
@@ -244,16 +286,16 @@ process.on("SIGTERM", async () => {
 });
 
 process.on("uncaughtException", (error) => {
-  console.error("Uncaught exception:", error);
+  logError("Uncaught exception", error);
   process.exit(1);
 });
 
 process.on("unhandledRejection", (reason) => {
-  console.error("Unhandled rejection:", reason);
+  logError("Unhandled rejection", reason);
   process.exit(1);
 });
 
 main().catch((error: unknown) => {
-  console.error("Failed to start server:", error);
+  logError("Failed to start server", error);
   process.exit(1);
 });

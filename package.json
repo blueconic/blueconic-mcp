@@ -1,6 +1,6 @@
 {
   "name": "@blueconic/blueconic-mcp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "BlueConic Client-Side MCP Server - Dynamic multi-tenant OpenAPI adapter for providing context to AI models",
   "main": "dist/client-side-server.js",
   "types": "dist/client-side-server.d.ts",

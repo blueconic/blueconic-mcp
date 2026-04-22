@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "blueconic-mcp",
   "display_name": "BlueConic",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Connect Claude to your BlueConic CDP and explore tenant data through dynamically generated MCP tools.",
   "long_description": "BlueConic MCP runs locally, loads your tenant's OpenAPI specification at startup, and exposes BlueConic's read-only GET endpoints as MCP tools. The same codebase also works with Cursor, VS Code, and other stdio-based MCP clients.",
   "author": {

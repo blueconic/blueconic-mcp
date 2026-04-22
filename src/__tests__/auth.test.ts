@@ -62,4 +62,20 @@ describe("getAccessToken", () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
+
+  it("sends OAuth requests with a timeout-backed abort signal", async () => {
+    const mockFetch = jest.fn<typeof fetch>().mockResolvedValue(createTokenResponse("token-1"));
+    const { getAccessToken } = await loadAuthModule(mockFetch);
+
+    await expect(
+      getAccessToken("https://tenant.blueconic.net", "client-a", "secret-a")
+    ).resolves.toBe("token-1");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://tenant.blueconic.net/rest/v2/oauth/token",
+      expect.objectContaining({
+        signal: expect.any(AbortSignal)
+      })
+    );
+  });
 });

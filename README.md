@@ -20,6 +20,7 @@ src/
   client-side-server.ts
   api-client.ts
   auth.ts
+  logging.ts
   openapi-tools.ts
   __tests__/
 scripts/
@@ -45,10 +46,9 @@ Set your BlueConic credentials for local stdio development:
 export BLUECONIC_TENANT_URL="https://yourtenant.blueconic.net"
 export OAUTH_CLIENT_ID="your_client_id"
 export OAUTH_CLIENT_SECRET="your_client_secret"
-
-# Optional for development against self-signed certificates
-export NODE_TLS_REJECT_UNAUTHORIZED="0"
 ```
+
+This connector requires normal TLS certificate verification. Self-signed certificate bypass is not supported.
 
 Run from source:
 
@@ -191,8 +191,8 @@ For local development, point the command to `src/client-side-server.ts` in the s
 
 ## Behavior
 
-- The server discovers tools dynamically from the tenant's OpenAPI specification at startup.
-- Only read-only `GET` endpoints are exposed as tools.
+- The server discovers tools dynamically from the tenant's OpenAPI specification at startup, but only after filtering it through an explicit allowlist of approved endpoint paths.
+- The approved tool surface is limited to the reviewed read-only endpoints for connections, interactions, profile events, profiles, and segments.
 - OAuth tokens are cached in memory and refreshed automatically before expiration.
 - Responses are returned as formatted JSON when possible, with text or base64 fallbacks for non-JSON payloads.
 

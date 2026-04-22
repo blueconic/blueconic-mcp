@@ -1,5 +1,6 @@
-import { fetch } from "./http.js";
+import { fetchWithTimeout } from "./http.js";
 import { BlueConicConfigError, BlueConicHttpError } from "./errors.js";
+import { APPROVED_READ_SCOPES } from "./openapi-tools.js";
 
 let accessToken: string | null = null;
 let cachedCredentialKey: string | null = null;
@@ -20,7 +21,7 @@ export async function getAccessToken(
     return accessToken;
   }
 
-  const response = await fetch(`${tenantUrl}/rest/v2/oauth/token`, {
+  const response = await fetchWithTimeout(`${tenantUrl}/rest/v2/oauth/token`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -28,7 +29,7 @@ export async function getAccessToken(
     },
     body: new URLSearchParams({
       grant_type: "client_credentials",
-      scope: "read:segments read:profiles read:connections read:interactions"
+      scope: APPROVED_READ_SCOPES.join(" ")
     }).toString()
   });
 
