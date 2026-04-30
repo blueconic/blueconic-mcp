@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "blueconic-mcp",
   "display_name": "BlueConic",
-  "version": "1.0.2",
-  "description": "Connect Claude to your BlueConic CDP and explore tenant data through dynamically generated MCP tools.",
-  "long_description": "BlueConic MCP runs locally, loads your tenant's OpenAPI specification at startup, and exposes BlueConic's read-only GET endpoints as MCP tools. The same codebase also works with Cursor, VS Code, and other stdio-based MCP clients.",
+  "version": "1.1.0",
+  "description": "Let Claude query and manage your BlueConic tenant — profiles, segments, connections, content stores, models, and more.",
+  "long_description": "Connect Claude to your BlueConic Customer Data Platform using OAuth credentials from an application configured in your tenant. Claude can look up profiles, segments, and profile properties; inspect connections and their run history; review dialogues, channels, listeners, and plugins; explore content stores, groups, models, lifecycles, and objectives; retrieve timeline event data and reporting statistics; and browse notebooks, users, roles, and audit events.\n\nWrite access is available when your OAuth application includes the appropriate scopes — Claude can then create and update profiles, profile properties, groups, content store items, URL mappings, and machine learning models.\n\nThe connector runs locally on your machine, authenticates only with your configured tenant, and calls a reviewed set of BlueConic REST API v2 endpoints.",
   "author": {
     "name": "BlueConic",
     "url": "https://www.blueconic.com"

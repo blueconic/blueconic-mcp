@@ -45,6 +45,32 @@ describe("getClientFacingErrorMessage", () => {
     );
   });
 
+  it("maps rate limits to a retryable message", () => {
+    const error = new BlueConicHttpError("429 detail", {
+      operation: "GET /segments",
+      status: 429,
+      statusText: "Too Many Requests",
+      responseBody: "{\"message\":\"rate limited\"}"
+    });
+
+    expect(getClientFacingErrorMessage(error)).toBe(
+      "BlueConic is rate limiting requests right now. Please try again in a moment."
+    );
+  });
+
+  it("maps server failures to a temporary availability message", () => {
+    const error = new BlueConicHttpError("503 detail", {
+      operation: "GET /segments",
+      status: 503,
+      statusText: "Service Unavailable",
+      responseBody: "{\"message\":\"busy\"}"
+    });
+
+    expect(getClientFacingErrorMessage(error)).toBe(
+      "BlueConic is temporarily unavailable. Please try again later."
+    );
+  });
+
   it("falls back to a generic message for unknown errors", () => {
     expect(getClientFacingErrorMessage(new Error("raw upstream text"))).toBe(
       "BlueConic could not complete this request. Please try again later."

@@ -32,7 +32,7 @@ describe("getAccessToken", () => {
     setGlobalFetch(originalFetch);
   });
 
-  it("caches tokens for the same tenant and client id", async () => {
+  it("caches tokens for the same tenant, client id, secret, and scopes", async () => {
     const mockFetch = jest.fn<typeof fetch>().mockResolvedValue(createTokenResponse("token-1"));
     const { getAccessToken } = await loadAuthModule(mockFetch);
 
@@ -61,6 +61,55 @@ describe("getAccessToken", () => {
     ).resolves.toBe("token-b");
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not reuse cached tokens across different client secrets", async () => {
+    const mockFetch = jest
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(createTokenResponse("token-a"))
+      .mockResolvedValueOnce(createTokenResponse("token-b"));
+    const { getAccessToken } = await loadAuthModule(mockFetch);
+
+    await expect(
+      getAccessToken("https://tenant.blueconic.net", "client-a", "secret-a")
+    ).resolves.toBe("token-a");
+    await expect(
+      getAccessToken("https://tenant.blueconic.net", "client-a", "secret-b")
+    ).resolves.toBe("token-b");
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not reuse cached tokens across different scope sets", async () => {
+    const mockFetch = jest
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(createTokenResponse("read-token"))
+      .mockResolvedValueOnce(createTokenResponse("write-token"));
+    const { getAccessToken } = await loadAuthModule(mockFetch);
+
+    await expect(
+      getAccessToken("https://tenant.blueconic.net", "client-a", "secret-a", ["read:profiles"])
+    ).resolves.toBe("read-token");
+    await expect(
+      getAccessToken("https://tenant.blueconic.net", "client-a", "secret-a", ["write:profiles"])
+    ).resolves.toBe("write-token");
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("sends requested scopes in sorted order", async () => {
+    const mockFetch = jest.fn<typeof fetch>().mockResolvedValue(createTokenResponse("token-1"));
+    const { getAccessToken } = await loadAuthModule(mockFetch);
+
+    await expect(
+      getAccessToken("https://tenant.blueconic.net", "client-a", "secret-a", [
+        "write:profiles",
+        "read:profiles"
+      ])
+    ).resolves.toBe("token-1");
+
+    const [, requestInit] = mockFetch.mock.calls[0];
+    expect(requestInit?.body).toBe("grant_type=client_credentials&scope=read%3Aprofiles+write%3Aprofiles");
   });
 
   it("sends OAuth requests with a timeout-backed abort signal", async () => {

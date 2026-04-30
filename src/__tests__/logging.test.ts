@@ -28,4 +28,17 @@ describe("formatErrorForLog", () => {
       timeoutMs: 30_000
     });
   });
+
+  it("serializes generic errors without stack traces", () => {
+    expect(formatErrorForLog(new Error("plain failure"))).toEqual({
+      name: "Error",
+      message: "plain failure"
+    });
+  });
+
+  it("serializes non-error values safely", () => {
+    expect(formatErrorForLog("plain string")).toEqual({
+      value: "plain string"
+    });
+  });
 });

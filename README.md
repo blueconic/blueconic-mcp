@@ -1,6 +1,6 @@
 # BlueConic MCP
 
-BlueConic MCP is a local MCP server that loads a BlueConic tenant's OpenAPI specification at startup and turns the tenant's read-only `GET` endpoints into MCP tools. This repository supports:
+BlueConic MCP is a local MCP server that loads a BlueConic tenant's OpenAPI specification at startup and turns the tenant's supported REST operations into MCP tools. This repository supports:
 
 - Claude Desktop through a packaged `.mcpb` connector
 - Standard stdio MCP clients such as Cursor, VS Code, and other MCP-capable tools
@@ -191,8 +191,11 @@ For local development, point the command to `src/client-side-server.ts` in the s
 
 ## Behavior
 
-- The server discovers tools dynamically from the tenant's OpenAPI specification at startup, but only after filtering it through an explicit allowlist of approved endpoint paths.
-- The approved tool surface is limited to the reviewed read-only endpoints for connections, interactions, profile events, profiles, and segments.
+- The server discovers schemas dynamically from the tenant's OpenAPI specification at startup, but only exposes operations that are explicitly listed in `APPROVED_OPERATION_POLICIES` in `src/openapi-tools.ts`.
+- The approved surface currently covers reviewed BlueConic REST API v2 data operations. OAuth authorization, token issuance, and token revocation endpoints are intentionally excluded.
+- Tool annotations are derived from the HTTP method and operation text so clients can distinguish read-only, write, and destructive operations.
+- Write-capable tools can create/update content stores and content store items, bulk delete content store items, create/update/delete models, create/update/delete groups and profiles through bulk endpoints, create/update/delete profile or group properties, create/update URL mappings, and register interaction or pageview events.
+- Each tool requests only the OAuth scopes declared by its OpenAPI operation when it is called.
 - OAuth tokens are cached in memory and refreshed automatically before expiration.
 - Responses are returned as formatted JSON when possible, with text or base64 fallbacks for non-JSON payloads.
 
@@ -203,14 +206,22 @@ To create a suitable OAuth client in BlueConic:
 1. Log into your BlueConic tenant.
 2. Go to `Settings > Access management > Applications`.
 3. Create an application using the client credentials flow.
-4. Grant the read scopes you need.
+4. Grant the read and/or write scopes for the tools you want the MCP client to use.
 5. Copy the client ID and client secret into your MCP configuration.
 
-Typical read scopes include:
+Common read scopes include:
 
 - `read:segments`
 - `read:profiles`
 - `read:connections`
-- `read:interactions`
+- `read:content_stores`
+- `read:models`
 
-Write scopes are not exposed by this MCP server today.
+Common write scopes include:
+
+- `write:profiles`
+- `write:groups`
+- `write:profile-properties`
+- `write:content_stores`
+- `write:models`
+- `write:url-mappings`

@@ -11,6 +11,7 @@ import {
 
 import { makeApiCall, type QueryParamScalar, type QueryParamValue } from "./api-client.js";
 import { getAccessToken } from "./auth.js";
+import { normalizeTenantUrl } from "./config.js";
 import {
   BLUECONIC_CONFIGURATION_REQUIRED_MESSAGE,
   BLUECONIC_TLS_CONFIGURATION_MESSAGE,
@@ -28,15 +29,6 @@ type ServerConfig = {
   clientSecret: string;
   tenantUrl: string;
 };
-
-function normalizeTenantUrl(rawTenantUrl?: string): string | undefined {
-  if (!rawTenantUrl) {
-    return undefined;
-  }
-
-  const tenantUrl = rawTenantUrl.startsWith("http") ? rawTenantUrl : `https://${rawTenantUrl}`;
-  return tenantUrl.endsWith("/") ? tenantUrl.slice(0, -1) : tenantUrl;
-}
 
 function readServerConfig(): ServerConfig | null {
   const tenantUrl = normalizeTenantUrl(process.env.BLUECONIC_TENANT_URL);
@@ -114,10 +106,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     throw new Error(runtimeValidationMessage);
   }
 
-  if (!serverConfig) {
-    throw new Error(BLUECONIC_CONFIGURATION_REQUIRED_MESSAGE);
-  }
-
   try {
     await ensureOpenApiToolsLoaded();
 
@@ -168,29 +156,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   const toolName = request.params.name;
-  const tool = tools.find((candidate) => candidate.name === toolName);
-
-  if (!tool) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: "The requested BlueConic tool is unavailable."
-        }
-      ],
-      isError: true
-    };
-  }
-
-  const args = (request.params.arguments ?? {}) as Record<string, unknown>;
-  console.error(`Executing tool: ${toolName}`);
 
   try {
-    const token = await getAccessToken(
-      currentServerConfig.tenantUrl,
-      currentServerConfig.clientId,
-      currentServerConfig.clientSecret
-    );
+    await ensureOpenApiToolsLoaded();
+    const tool = tools.find((candidate) => candidate.name === toolName);
+
+    if (!tool) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "The requested BlueConic tool is unavailable."
+          }
+        ],
+        isError: true
+      };
+    }
+
+    const args = (request.params.arguments ?? {}) as Record<string, unknown>;
+    console.error(`Executing tool: ${toolName}`);
+
+    const token = tool.requiresAuth
+      ? await getAccessToken(
+        currentServerConfig.tenantUrl,
+        currentServerConfig.clientId,
+        currentServerConfig.clientSecret,
+        tool.requiredScopes
+      )
+      : null;
 
     const pathParams: Record<string, string> = {};
     const queryParams: Record<string, QueryParamValue> = {};
@@ -220,9 +213,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       tool.method,
       tool.path,
       packageJson.version,
+      tool.name,
       pathParams,
       queryParams,
-      requestBody
+      requestBody,
+      tool.requestBodyContentType,
+      tool.requiresAuth
     );
 
     return {
@@ -254,11 +250,6 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  if (!serverConfig) {
-    console.error(BLUECONIC_CONFIGURATION_REQUIRED_MESSAGE);
-    process.exit(1);
-  }
-
   try {
     await ensureOpenApiToolsLoaded();
 
@@ -266,7 +257,7 @@ async function main(): Promise<void> {
     await server.connect(transport);
 
     console.error(`BlueConic MCP server started successfully (version: ${packageJson.version})`);
-    console.error(`Loaded ${tools.length} approved API endpoints`);
+    console.error(`Loaded ${tools.length} OpenAPI operations`);
   } catch (error: unknown) {
     logError("Failed to start server", error);
     process.exit(1);

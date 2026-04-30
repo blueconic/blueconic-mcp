@@ -1,24 +1,56 @@
+import { createHash } from "node:crypto";
+
 import { fetchWithTimeout } from "./http.js";
 import { BlueConicConfigError, BlueConicHttpError } from "./errors.js";
-import { APPROVED_READ_SCOPES } from "./openapi-tools.js";
 
-let accessToken: string | null = null;
-let cachedCredentialKey: string | null = null;
-let tokenExpiry: number | null = null;
+type CachedToken = {
+  accessToken: string;
+  tokenExpiry: number;
+};
+
+const tokenCache = new Map<string, CachedToken>();
+
+function normalizeScopes(scopes: readonly string[]): string[] {
+  return [...new Set(scopes)].sort();
+}
+
+function createCredentialKey(
+  tenantUrl: string,
+  clientId: string,
+  clientSecret: string,
+  scopes: readonly string[]
+): string {
+  const normalizedScopes = normalizeScopes(scopes).join(" ");
+  const credentialHash = createHash("sha256")
+    .update(`${clientId.length}:${clientId}:${clientSecret}`)
+    .digest("hex");
+  return `${tenantUrl}::${credentialHash}::${normalizedScopes}`;
+}
 
 /** Get an OAuth2 access token using the client credentials flow. */
 export async function getAccessToken(
   tenantUrl: string,
   clientId: string,
-  clientSecret: string
+  clientSecret: string,
+  scopes: readonly string[] = []
 ): Promise<string> {
   if (!tenantUrl || !clientId || !clientSecret) {
     throw new BlueConicConfigError("OAuth credentials or tenant URL not configured");
   }
 
-  const credentialKey = `${tenantUrl}::${clientId}`;
-  if (accessToken && tokenExpiry && cachedCredentialKey === credentialKey && Date.now() < tokenExpiry) {
-    return accessToken;
+  const credentialKey = createCredentialKey(tenantUrl, clientId, clientSecret, scopes);
+  const cachedToken = tokenCache.get(credentialKey);
+  if (cachedToken && Date.now() < cachedToken.tokenExpiry) {
+    return cachedToken.accessToken;
+  }
+
+  const requestBody = new URLSearchParams({
+    grant_type: "client_credentials"
+  });
+
+  const normalizedScopes = normalizeScopes(scopes);
+  if (normalizedScopes.length > 0) {
+    requestBody.set("scope", normalizedScopes.join(" "));
   }
 
   const response = await fetchWithTimeout(`${tenantUrl}/rest/v2/oauth/token`, {
@@ -27,10 +59,7 @@ export async function getAccessToken(
       "Content-Type": "application/x-www-form-urlencoded",
       "Authorization": `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`
     },
-    body: new URLSearchParams({
-      grant_type: "client_credentials",
-      scope: APPROVED_READ_SCOPES.join(" ")
-    }).toString()
+    body: requestBody.toString()
   });
 
   if (!response.ok) {
@@ -44,11 +73,11 @@ export async function getAccessToken(
   }
 
   const tokenData = await response.json() as { access_token: string; expires_in?: number };
-  accessToken = tokenData.access_token;
-  cachedCredentialKey = credentialKey;
-
   const expiresInSeconds = tokenData.expires_in ?? 3600;
-  tokenExpiry = Date.now() + (expiresInSeconds * 1000 * 0.9);
+  tokenCache.set(credentialKey, {
+    accessToken: tokenData.access_token,
+    tokenExpiry: Date.now() + (expiresInSeconds * 1000 * 0.9)
+  });
 
-  return accessToken;
+  return tokenData.access_token;
 }
