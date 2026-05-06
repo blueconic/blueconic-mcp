@@ -3,7 +3,7 @@
 BlueConic MCP is a local MCP server that loads a BlueConic tenant's OpenAPI specification at startup and turns the tenant's supported REST operations into MCP tools. This repository supports:
 
 - Claude Desktop through a packaged `.mcpb` connector
-- Standard stdio MCP clients such as Cursor, VS Code, and other MCP-capable tools
+- Standard stdio MCP clients such as Cursor, Gemini CLI, VS Code, and other MCP-capable tools
 - Local development from TypeScript source under `src/`
 
 More information is available in the BlueConic support docs:
@@ -144,6 +144,29 @@ For local development from source:
   }
 }
 ```
+
+## Gemini CLI
+
+Add this to your Gemini CLI `settings.json` when using the published npm package. Gemini CLI reads project settings from `.gemini/settings.json` and user settings from `~/.gemini/settings.json`.
+
+```json
+{
+  "mcpServers": {
+    "blueconic": {
+      "command": "npx",
+      "args": ["@blueconic/blueconic-mcp"],
+      "env": {
+        "BLUECONIC_TENANT_URL": "https://yourtenant.blueconic.net",
+        "OAUTH_CLIENT_ID": "your_client_id",
+        "OAUTH_CLIENT_SECRET": "your_client_secret"
+      },
+      "trust": true
+    }
+  }
+}
+```
+
+Use `/mcp` inside Gemini CLI to confirm the server is connected and the BlueConic tools are discovered.
 
 ## VS Code GitHub Copilot
 

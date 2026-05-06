@@ -51,6 +51,10 @@ type ApprovedOperationPolicy = {
   requiresAuth?: boolean;
   requiredScopes: readonly string[];
 };
+type ApprovedOperationGroup = {
+  name: string;
+  operations: readonly ApprovedOperationPolicy[];
+};
 
 export type DynamicTool = {
   annotations: {
@@ -71,175 +75,278 @@ export type DynamicTool = {
 
 export let tools: DynamicTool[] = [];
 
-// Claude connector review requires the callable surface to be explicit.
-// The list below is the reviewed BlueConic REST API v2 tool surface from the current OpenAPI definition.
-// OAuth management endpoints are intentionally excluded because auth plumbing should not be model-callable.
-// New BlueConic operations do not become MCP tools until they are reviewed and added here.
-export const APPROVED_OPERATION_POLICIES = [
-  { method: "get", path: "/auditEvents", operationId: "getAuditEvents", requiredScopes: ["read:audit-events"] },
+export const APPROVED_READ_OPERATION_GROUPS = [
   {
-    method: "get",
-    path: "/contentStores/{contentStore}/items",
-    operationId: "getContentItemsFromStore",
-    requiredScopes: ["read:content_stores"]
+    name: "Audit events",
+    operations: [
+      { method: "get", path: "/auditEvents", operationId: "getAuditEvents", requiredScopes: ["read:audit-events"] }
+    ]
   },
   {
-    method: "put",
-    path: "/contentStores/{contentStore}/items",
-    operationId: "addContentItemsToStore",
-    requiredScopes: ["write:content_stores"]
-  },
-  { method: "get", path: "/contentStores", operationId: "getAllContentStores", requiredScopes: ["read:content_stores"] },
-  { method: "post", path: "/contentStores", operationId: "createContentStore", requiredScopes: ["write:content_stores"] },
-  {
-    method: "delete",
-    path: "/contentStores/{contentStore}/items/bulk",
-    operationId: "deleteContentItemsFromStore",
-    requiredScopes: ["write:content_stores"]
-  },
-  {
-    method: "put",
-    path: "/contentStores/{contentStore}",
-    operationId: "updateContentStore",
-    requiredScopes: ["write:content_stores"]
-  },
-  { method: "get", path: "/connections", operationId: "getAllConnections", requiredScopes: ["read:connections"] },
-  { method: "get", path: "/connections/{connection}", operationId: "getOneConnection", requiredScopes: ["read:connections"] },
-  {
-    method: "get",
-    path: "/connections/{connection}/runs",
-    operationId: "getConnectionRuns",
-    requiredScopes: ["read:connections"]
-  },
-  { method: "get", path: "/dialogues", operationId: "getAllDialogues", requiredScopes: ["read:dialogues"] },
-  { method: "get", path: "/dialogues/{dialogue}", operationId: "getOneDialogue", requiredScopes: ["read:dialogues"] },
-  { method: "get", path: "/listeners", operationId: "getAllListeners", requiredScopes: ["read:listeners"] },
-  { method: "get", path: "/listeners/{listener}", operationId: "getOneListener", requiredScopes: ["read:listeners"] },
-  { method: "get", path: "/plugins/{plugin}", operationId: "getOnePlugin", requiredScopes: ["read:plugins"] },
-  { method: "get", path: "/plugins", operationId: "getAllPlugins", requiredScopes: ["read:plugins"] },
-  { method: "get", path: "/channels", operationId: "getAllChannels", requiredScopes: ["read:channels"] },
-  { method: "get", path: "/channels/{channelId}", operationId: "getOneChannel", requiredScopes: ["read:channels"] },
-  { method: "post", path: "/interactionEvents", operationId: "createEvent", requiresAuth: false, requiredScopes: [] },
-  { method: "get", path: "/interactions", operationId: "getInteractions", requiresAuth: false, requiredScopes: [] },
-  {
-    method: "post",
-    path: "/pageviewEvents",
-    operationId: "createPageviewEvent",
-    requiresAuth: false,
-    requiredScopes: []
-  },
-  { method: "get", path: "/lifecycles", operationId: "getAllLifecycles", requiredScopes: ["read:lifecycles"] },
-  { method: "get", path: "/lifecycles/{lifecycle}", operationId: "getOneLifecycle", requiredScopes: ["read:lifecycles"] },
-  { method: "get", path: "/models", operationId: "getAllModels", requiredScopes: ["read:models"] },
-  { method: "post", path: "/models", operationId: "createModel", requiredScopes: ["write:models"] },
-  { method: "get", path: "/models/{model}", operationId: "getOneModelMetadata", requiredScopes: ["read:models"] },
-  { method: "put", path: "/models/{model}", operationId: "updateModel", requiredScopes: ["write:models"] },
-  { method: "delete", path: "/models/{model}", operationId: "deleteModel", requiredScopes: ["write:models"] },
-  { method: "get", path: "/models/{model}/model", operationId: "getModelONNXBinary", requiredScopes: ["read:models"] },
-  { method: "get", path: "/objectives", operationId: "getAllObjectives", requiredScopes: ["read:objectives"] },
-  { method: "get", path: "/objectives/{objective}", operationId: "getOneObjective", requiredScopes: ["read:objectives"] },
-  {
-    method: "get",
-    path: "/groups/{grouptype}/{group}",
-    operationId: "getOneGroupOfGroupType",
-    requiredScopes: ["read:groups"]
+    name: "Content stores",
+    operations: [
+      {
+        method: "get",
+        path: "/contentStores/{contentStore}/items",
+        operationId: "getContentItemsFromStore",
+        requiredScopes: ["read:content_stores"]
+      },
+      {
+        method: "get",
+        path: "/contentStores",
+        operationId: "getAllContentStores",
+        requiredScopes: ["read:content_stores"]
+      }
+    ]
   },
   {
-    method: "get",
-    path: "/groups/{grouptype}",
-    operationId: "getAllGroupsByGroupType",
-    requiredScopes: ["read:groups"]
-  },
-  { method: "put", path: "/groups", operationId: "createUpdateDeleteGroups", requiredScopes: ["write:groups"] },
-  { method: "get", path: "/groupTypes", operationId: "getAllGroupTypes", requiredScopes: ["read:group-types"] },
-  {
-    method: "get",
-    path: "/profileEvents/{profileId}",
-    operationId: "getProfileEvents",
-    requiredScopes: ["read:profiles"]
-  },
-  {
-    method: "get",
-    path: "/profileProperties/{propertyId}",
-    operationId: "getOneProfileOrGroupProperty",
-    requiredScopes: ["read:profile-properties"]
-  },
-  {
-    method: "put",
-    path: "/profileProperties/{propertyId}",
-    operationId: "createUpdateProfileOrGroupProperty",
-    requiredScopes: ["write:profile-properties"]
-  },
-  {
-    method: "delete",
-    path: "/profileProperties/{propertyId}",
-    operationId: "deleteProfileOrGroupProperty",
-    requiredScopes: ["write:profile-properties"]
-  },
-  {
-    method: "get",
-    path: "/profileProperties",
-    operationId: "getAllProfileOrGroupProperties",
-    requiredScopes: ["read:profile-properties"]
-  },
-  { method: "get", path: "/profiles", operationId: "searchProfiles", requiredScopes: ["read:profiles"] },
-  { method: "put", path: "/profiles", operationId: "createUpdateDeleteProfiles", requiredScopes: ["write:profiles"] },
-  { method: "get", path: "/profiles/{profileId}", operationId: "getOneProfile", requiredScopes: ["read:profiles"] },
-  {
-    method: "get",
-    path: "/segments/{segment}/profiles",
-    operationId: "getProfilesInSegment",
-    requiredScopes: ["read:segments"]
-  },
-  { method: "get", path: "/segments", operationId: "getAllSegments", requiredScopes: ["read:segments"] },
-  {
-    method: "get",
-    path: "/timelineEventTypes/{timelineEventType}",
-    operationId: "getOneTimelineEventType",
-    requiredScopes: ["read:timeline-event-types"]
+    name: "Connections and experiences",
+    operations: [
+      { method: "get", path: "/connections", operationId: "getAllConnections", requiredScopes: ["read:connections"] },
+      {
+        method: "get",
+        path: "/connections/{connection}",
+        operationId: "getOneConnection",
+        requiredScopes: ["read:connections"]
+      },
+      {
+        method: "get",
+        path: "/connections/{connection}/runs",
+        operationId: "getConnectionRuns",
+        requiredScopes: ["read:connections"]
+      },
+      { method: "get", path: "/dialogues", operationId: "getAllDialogues", requiredScopes: ["read:dialogues"] },
+      { method: "get", path: "/dialogues/{dialogue}", operationId: "getOneDialogue", requiredScopes: ["read:dialogues"] },
+      { method: "get", path: "/listeners", operationId: "getAllListeners", requiredScopes: ["read:listeners"] },
+      { method: "get", path: "/listeners/{listener}", operationId: "getOneListener", requiredScopes: ["read:listeners"] },
+      { method: "get", path: "/plugins/{plugin}", operationId: "getOnePlugin", requiredScopes: ["read:plugins"] },
+      { method: "get", path: "/plugins", operationId: "getAllPlugins", requiredScopes: ["read:plugins"] },
+      { method: "get", path: "/channels", operationId: "getAllChannels", requiredScopes: ["read:channels"] },
+      { method: "get", path: "/channels/{channelId}", operationId: "getOneChannel", requiredScopes: ["read:channels"] },
+      { method: "get", path: "/interactions", operationId: "getInteractions", requiresAuth: false, requiredScopes: [] },
+      { method: "get", path: "/lifecycles", operationId: "getAllLifecycles", requiredScopes: ["read:lifecycles"] },
+      {
+        method: "get",
+        path: "/lifecycles/{lifecycle}",
+        operationId: "getOneLifecycle",
+        requiredScopes: ["read:lifecycles"]
+      },
+      { method: "get", path: "/objectives", operationId: "getAllObjectives", requiredScopes: ["read:objectives"] },
+      {
+        method: "get",
+        path: "/objectives/{objective}",
+        operationId: "getOneObjective",
+        requiredScopes: ["read:objectives"]
+      }
+    ]
   },
   {
-    method: "get",
-    path: "/timelineEventTypes",
-    operationId: "getTimelineEventTypes",
-    requiredScopes: ["read:timeline-event-types"]
+    name: "Models",
+    operations: [
+      { method: "get", path: "/models", operationId: "getAllModels", requiredScopes: ["read:models"] },
+      { method: "get", path: "/models/{model}", operationId: "getOneModelMetadata", requiredScopes: ["read:models"] },
+      { method: "get", path: "/models/{model}/model", operationId: "getModelONNXBinary", requiredScopes: ["read:models"] }
+    ]
   },
   {
-    method: "post",
-    path: "/recommendations",
-    operationId: "getRecommendationsPostJsonpAsync",
-    requiresAuth: false,
-    requiredScopes: []
+    name: "Profiles, groups, and segments",
+    operations: [
+      {
+        method: "get",
+        path: "/groups/{grouptype}/{group}",
+        operationId: "getOneGroupOfGroupType",
+        requiredScopes: ["read:groups"]
+      },
+      {
+        method: "get",
+        path: "/groups/{grouptype}",
+        operationId: "getAllGroupsByGroupType",
+        requiredScopes: ["read:groups"]
+      },
+      { method: "get", path: "/groupTypes", operationId: "getAllGroupTypes", requiredScopes: ["read:group-types"] },
+      {
+        method: "get",
+        path: "/profileEvents/{profileId}",
+        operationId: "getProfileEvents",
+        requiredScopes: ["read:profiles"]
+      },
+      {
+        method: "get",
+        path: "/profileProperties/{propertyId}",
+        operationId: "getOneProfileOrGroupProperty",
+        requiredScopes: ["read:profile-properties"]
+      },
+      {
+        method: "get",
+        path: "/profileProperties",
+        operationId: "getAllProfileOrGroupProperties",
+        requiredScopes: ["read:profile-properties"]
+      },
+      { method: "get", path: "/profiles", operationId: "searchProfiles", requiredScopes: ["read:profiles"] },
+      { method: "get", path: "/profiles/{profileId}", operationId: "getOneProfile", requiredScopes: ["read:profiles"] },
+      {
+        method: "get",
+        path: "/segments/{segment}/profiles",
+        operationId: "getProfilesInSegment",
+        requiredScopes: ["read:segments"]
+      },
+      { method: "get", path: "/segments", operationId: "getAllSegments", requiredScopes: ["read:segments"] }
+    ]
   },
-  { method: "get", path: "/reporting/dialogues", operationId: "getDialogueStatistics", requiredScopes: ["read:dialogues"] },
   {
-    method: "get",
-    path: "/timelineEventRollups",
-    operationId: "getAllRollups",
-    requiredScopes: ["read:timeline_event_rollups"]
+    name: "Timeline, recommendations, and reporting",
+    operations: [
+      {
+        method: "get",
+        path: "/timelineEventTypes/{timelineEventType}",
+        operationId: "getOneTimelineEventType",
+        requiredScopes: ["read:timeline-event-types"]
+      },
+      {
+        method: "get",
+        path: "/timelineEventTypes",
+        operationId: "getTimelineEventTypes",
+        requiredScopes: ["read:timeline-event-types"]
+      },
+      {
+        method: "post",
+        path: "/recommendations",
+        operationId: "getRecommendationsPostJsonpAsync",
+        requiresAuth: false,
+        requiredScopes: []
+      },
+      {
+        method: "get",
+        path: "/reporting/dialogues",
+        operationId: "getDialogueStatistics",
+        requiredScopes: ["read:dialogues"]
+      },
+      {
+        method: "get",
+        path: "/timelineEventRollups",
+        operationId: "getAllRollups",
+        requiredScopes: ["read:timeline_event_rollups"]
+      },
+      {
+        method: "get",
+        path: "/timelineEventRollups/{rollup}",
+        operationId: "getOneRollup",
+        requiredScopes: ["read:timeline_event_rollups"]
+      }
+    ]
   },
   {
-    method: "get",
-    path: "/timelineEventRollups/{rollup}",
-    operationId: "getOneRollup",
-    requiredScopes: ["read:timeline_event_rollups"]
+    name: "URL mappings",
+    operations: [
+      { method: "get", path: "/urlmappings/{id}", operationId: "getOneURLMapping", requiredScopes: ["read:url-mappings"] }
+    ]
   },
-  { method: "post", path: "/urlmappings", operationId: "createURLMapping", requiredScopes: ["write:url-mappings"] },
-  { method: "get", path: "/urlmappings/{id}", operationId: "getOneURLMapping", requiredScopes: ["read:url-mappings"] },
-  { method: "put", path: "/urlmappings/{id}", operationId: "updateURLMapping", requiredScopes: ["write:url-mappings"] },
-  { method: "get", path: "/roles", operationId: "getAllRoles", requiredScopes: ["read:roles"] },
-  { method: "get", path: "/roles/{role}", operationId: "getOneRole", requiredScopes: ["read:roles"] },
-  { method: "get", path: "/users", operationId: "getAllUsers", requiredScopes: ["read:users"] },
-  { method: "get", path: "/users/{user}", operationId: "getOneUser", requiredScopes: ["read:users"] },
-  { method: "get", path: "/notebooks", operationId: "getAllNotebooks", requiredScopes: ["read:notebooks"] },
-  { method: "get", path: "/notebooks/{notebook}", operationId: "getOneNotebook", requiredScopes: ["read:notebooks"] },
   {
-    method: "get",
-    path: "/notebooks/{notebook}/runs",
-    operationId: "getNotebookRunHistory",
-    requiredScopes: ["read:notebooks"]
+    name: "Administration and notebooks",
+    operations: [
+      { method: "get", path: "/roles", operationId: "getAllRoles", requiredScopes: ["read:roles"] },
+      { method: "get", path: "/roles/{role}", operationId: "getOneRole", requiredScopes: ["read:roles"] },
+      { method: "get", path: "/users", operationId: "getAllUsers", requiredScopes: ["read:users"] },
+      { method: "get", path: "/users/{user}", operationId: "getOneUser", requiredScopes: ["read:users"] },
+      { method: "get", path: "/notebooks", operationId: "getAllNotebooks", requiredScopes: ["read:notebooks"] },
+      { method: "get", path: "/notebooks/{notebook}", operationId: "getOneNotebook", requiredScopes: ["read:notebooks"] },
+      {
+        method: "get",
+        path: "/notebooks/{notebook}/runs",
+        operationId: "getNotebookRunHistory",
+        requiredScopes: ["read:notebooks"]
+      }
+    ]
   }
-] as const satisfies readonly ApprovedOperationPolicy[];
+] as const satisfies readonly ApprovedOperationGroup[];
+
+export const APPROVED_WRITE_OPERATION_GROUPS = [
+  {
+    name: "Content store writes",
+    operations: [
+      {
+        method: "put",
+        path: "/contentStores/{contentStore}/items",
+        operationId: "addContentItemsToStore",
+        requiredScopes: ["write:content_stores"]
+      },
+      {
+        method: "post",
+        path: "/contentStores",
+        operationId: "createContentStore",
+        requiredScopes: ["write:content_stores"]
+      },
+      {
+        method: "delete",
+        path: "/contentStores/{contentStore}/items/bulk",
+        operationId: "deleteContentItemsFromStore",
+        requiredScopes: ["write:content_stores"]
+      },
+      {
+        method: "put",
+        path: "/contentStores/{contentStore}",
+        operationId: "updateContentStore",
+        requiredScopes: ["write:content_stores"]
+      }
+    ]
+  },
+  {
+    name: "Event registration writes",
+    operations: [
+      { method: "post", path: "/interactionEvents", operationId: "createEvent", requiresAuth: false, requiredScopes: [] },
+      {
+        method: "post",
+        path: "/pageviewEvents",
+        operationId: "createPageviewEvent",
+        requiresAuth: false,
+        requiredScopes: []
+      }
+    ]
+  },
+  {
+    name: "Model writes",
+    operations: [
+      { method: "post", path: "/models", operationId: "createModel", requiredScopes: ["write:models"] },
+      { method: "put", path: "/models/{model}", operationId: "updateModel", requiredScopes: ["write:models"] },
+      { method: "delete", path: "/models/{model}", operationId: "deleteModel", requiredScopes: ["write:models"] }
+    ]
+  },
+  {
+    name: "Profile and group writes",
+    operations: [
+      { method: "put", path: "/groups", operationId: "createUpdateDeleteGroups", requiredScopes: ["write:groups"] },
+      {
+        method: "put",
+        path: "/profileProperties/{propertyId}",
+        operationId: "createUpdateProfileOrGroupProperty",
+        requiredScopes: ["write:profile-properties"]
+      },
+      {
+        method: "delete",
+        path: "/profileProperties/{propertyId}",
+        operationId: "deleteProfileOrGroupProperty",
+        requiredScopes: ["write:profile-properties"]
+      },
+      { method: "put", path: "/profiles", operationId: "createUpdateDeleteProfiles", requiredScopes: ["write:profiles"] }
+    ]
+  },
+  {
+    name: "URL mapping writes",
+    operations: [
+      { method: "post", path: "/urlmappings", operationId: "createURLMapping", requiredScopes: ["write:url-mappings"] },
+      { method: "put", path: "/urlmappings/{id}", operationId: "updateURLMapping", requiredScopes: ["write:url-mappings"] }
+    ]
+  }
+] as const satisfies readonly ApprovedOperationGroup[];
+
+function flattenOperationGroups(groups: readonly ApprovedOperationGroup[]): ApprovedOperationPolicy[] {
+  return groups.flatMap(({ operations }) => [...operations]);
+}
+
+export const APPROVED_OPERATION_POLICIES: readonly ApprovedOperationPolicy[] = [
+  ...flattenOperationGroups(APPROVED_READ_OPERATION_GROUPS),
+  ...flattenOperationGroups(APPROVED_WRITE_OPERATION_GROUPS)
+];
 
 /** Load the OpenAPI specification from the user's tenant. */
 export async function loadOpenApiSpec(tenantUrl?: string, version = "0.0.0"): Promise<void> {
@@ -436,7 +543,7 @@ export function generateInputSchema(
     }
 
     schema.properties[parameter.name] = {
-      ...generateParameterInputSchema(parameter)
+      ...generateParameterInputSchema(parameter, openApiSpec)
     };
 
     if (parameter.required) {
@@ -467,15 +574,8 @@ export function generateInputSchema(
   return schema;
 }
 
-function generateParameterInputSchema(parameter: OpenApiParameter): Record<string, unknown> {
-  const parameterSchema = parameter.schema ?? {};
-
-  if (typeof parameterSchema.$ref === "string") {
-    return {
-      type: "object",
-      description: parameter.description
-    };
-  }
+function generateParameterInputSchema(parameter: OpenApiParameter, openApiSpec?: OpenApiSpec): Record<string, unknown> {
+  const parameterSchema = resolveSchemaReference(parameter.schema ?? {}, openApiSpec);
 
   return {
     ...parameterSchema,
@@ -484,14 +584,62 @@ function generateParameterInputSchema(parameter: OpenApiParameter): Record<strin
   };
 }
 
-function resolveSchemaReference(
-  schema: Record<string, unknown>,
-  openApiSpec?: OpenApiSpec
-): Record<string, unknown> {
-  if (typeof schema.$ref !== "string") {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getLocalSchemaReference(schemaReference: string, openApiSpec?: OpenApiSpec): Record<string, unknown> | undefined {
+  const schemaName = schemaReference.replace("#/components/schemas/", "");
+  return openApiSpec?.components?.schemas?.[schemaName];
+}
+
+function resolveSchemaReference(schema: Record<string, unknown>, openApiSpec?: OpenApiSpec): Record<string, unknown> {
+  const resolvedSchema = resolveSchemaReferences(schema, openApiSpec);
+  return isRecord(resolvedSchema) ? resolvedSchema : {};
+}
+
+function resolveSchemaReferences(
+  schema: unknown,
+  openApiSpec?: OpenApiSpec,
+  seenReferences = new Set<string>()
+): unknown {
+  if (Array.isArray(schema)) {
+    return schema.map((value) => resolveSchemaReferences(value, openApiSpec, seenReferences));
+  }
+
+  if (!isRecord(schema)) {
     return schema;
   }
 
-  const schemaName = schema.$ref.replace("#/components/schemas/", "");
-  return openApiSpec?.components?.schemas?.[schemaName] ?? schema;
+  if (typeof schema.$ref === "string") {
+    const siblingEntries = Object.entries(schema).filter(([key]) => key !== "$ref");
+    const siblingSchema = Object.fromEntries(siblingEntries);
+    const resolvedReference = getLocalSchemaReference(schema.$ref, openApiSpec);
+
+    if (!resolvedReference || seenReferences.has(schema.$ref)) {
+      return resolveSchemaReferences(
+        Object.keys(siblingSchema).length > 0 ? siblingSchema : { type: "object" },
+        openApiSpec,
+        seenReferences
+      );
+    }
+
+    const nextSeenReferences = new Set(seenReferences);
+    nextSeenReferences.add(schema.$ref);
+    const resolvedSchema = resolveSchemaReferences(resolvedReference, openApiSpec, nextSeenReferences);
+    const resolvedSiblings = resolveSchemaReferences(siblingSchema, openApiSpec, seenReferences);
+
+    if (!isRecord(resolvedSchema)) {
+      return resolvedSiblings;
+    }
+
+    return {
+      ...resolvedSchema,
+      ...(isRecord(resolvedSiblings) ? resolvedSiblings : {})
+    };
+  }
+
+  return Object.fromEntries(
+    Object.entries(schema).map(([key, value]) => [key, resolveSchemaReferences(value, openApiSpec, seenReferences)])
+  );
 }

@@ -1,5 +1,7 @@
 import {
   APPROVED_OPERATION_POLICIES,
+  APPROVED_READ_OPERATION_GROUPS,
+  APPROVED_WRITE_OPERATION_GROUPS,
   buildToolsFromSpec,
   filterApprovedOpenApiSpec,
   generateInputSchema,
@@ -28,6 +30,30 @@ function buildSpecFromApprovedPolicies() {
 }
 
 describe("APPROVED_OPERATION_POLICIES", () => {
+  it("keeps reviewed operations organized by read and write groups", () => {
+    expect(APPROVED_READ_OPERATION_GROUPS.map(({ name }) => name)).toEqual([
+      "Audit events",
+      "Content stores",
+      "Connections and experiences",
+      "Models",
+      "Profiles, groups, and segments",
+      "Timeline, recommendations, and reporting",
+      "URL mappings",
+      "Administration and notebooks"
+    ]);
+    expect(APPROVED_WRITE_OPERATION_GROUPS.map(({ name }) => name)).toEqual([
+      "Content store writes",
+      "Event registration writes",
+      "Model writes",
+      "Profile and group writes",
+      "URL mapping writes"
+    ]);
+    expect(APPROVED_OPERATION_POLICIES).toEqual([
+      ...APPROVED_READ_OPERATION_GROUPS.flatMap(({ operations }) => operations),
+      ...APPROVED_WRITE_OPERATION_GROUPS.flatMap(({ operations }) => operations)
+    ]);
+  });
+
   it("clearly enumerates every reviewed BlueConic MCP tool", () => {
     const policyKeys = APPROVED_OPERATION_POLICIES.map(({ method, operationId, path }) =>
       `${method.toUpperCase()} ${path} :: ${operationId}`
@@ -216,6 +242,46 @@ describe("generateInputSchema", () => {
     });
   });
 
+  it("resolves nested component references inside query parameter schemas", () => {
+    const schema = generateInputSchema(
+      {
+        parameters: [{
+          in: "query",
+          name: "filters",
+          schema: {
+            type: "array",
+            items: { $ref: "#/components/schemas/SearchFilter" }
+          }
+        }]
+      },
+      "/profiles",
+      "get",
+      {
+        components: {
+          schemas: {
+            SearchFilter: {
+              type: "object",
+              properties: {
+                value: { type: "string" }
+              }
+            }
+          }
+        }
+      }
+    );
+
+    expect(JSON.stringify(schema)).not.toContain("\"$ref\"");
+    expect(schema.properties.filters).toMatchObject({
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          value: { type: "string" }
+        }
+      }
+    });
+  });
+
   it("includes request body schema for write operations", () => {
     const schema = generateInputSchema(
       {
@@ -303,6 +369,80 @@ describe("generateInputSchema", () => {
       type: "object",
       properties: {
         metadata: { type: "object" }
+      }
+    });
+  });
+
+  it("resolves nested component references inside request body schemas", () => {
+    const schema = generateInputSchema(
+      {
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/ContentStoreItemsRequest"
+              }
+            }
+          }
+        }
+      },
+      "/contentStores/{contentStore}/items",
+      "put",
+      {
+        components: {
+          schemas: {
+            ContentStoreItemsRequest: {
+              type: "object",
+              properties: {
+                items: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/ContentStoreItem" }
+                }
+              }
+            },
+            ContentStoreItem: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                variants: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/ContentStoreItemVariant" }
+                }
+              }
+            },
+            ContentStoreItemVariant: {
+              type: "object",
+              properties: {
+                value: { type: "string" }
+              }
+            }
+          }
+        }
+      }
+    );
+
+    expect(JSON.stringify(schema)).not.toContain("\"$ref\"");
+    expect(schema.properties.requestBody).toMatchObject({
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              variants: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    value: { type: "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     });
   });
