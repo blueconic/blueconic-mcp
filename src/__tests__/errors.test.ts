@@ -39,6 +39,45 @@ describe("getClientFacingErrorMessage", () => {
     );
   });
 
+  it("includes BlueConic validation messages when available", () => {
+    const error = new BlueConicHttpError("400 detail", {
+      operation: "PUT /profileProperties/test_property",
+      status: 400,
+      statusText: "Bad Request",
+      responseBody: "{\"error\":{\"status\":400,\"message\":\"The property ID in the body must match the path.\"}}"
+    });
+
+    expect(getClientFacingErrorMessage(error)).toBe(
+      "BlueConic could not process this request: The property ID in the body must match the path."
+    );
+  });
+
+  it("includes plain-text BlueConic validation messages", () => {
+    const error = new BlueConicHttpError("400 detail", {
+      operation: "PUT /profileProperties/test_property",
+      status: 400,
+      statusText: "Bad Request",
+      responseBody: "Field useValidation is not allowed for this request."
+    });
+
+    expect(getClientFacingErrorMessage(error)).toBe(
+      "BlueConic could not process this request: Field useValidation is not allowed for this request."
+    );
+  });
+
+  it("maps OAuth scope failures to a clear permissions message", () => {
+    const error = new BlueConicHttpError("400 detail", {
+      operation: "POST /rest/v2/oauth/token",
+      status: 400,
+      statusText: "Bad Request",
+      responseBody: "{\"error\":\"invalid_scope\"}"
+    });
+
+    expect(getClientFacingErrorMessage(error)).toBe(
+      "BlueConic rejected the requested OAuth scopes. Grant the OAuth application the scopes required by this tool and try again."
+    );
+  });
+
   it("maps timeout failures to a retryable message", () => {
     expect(getClientFacingErrorMessage(new BlueConicTimeoutError(30_000))).toBe(
       "BlueConic timed out while processing the request. Please try again."

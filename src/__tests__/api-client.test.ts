@@ -242,4 +242,308 @@ describe("makeApiCall", () => {
     const body = requestInit?.body as FormData;
     expect([...body.entries()]).toEqual([]);
   });
+
+  it("retains existing JSON configuration before update requests", async () => {
+    const mockFetch = jest
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: "favorite_color",
+        name: "Favorite color",
+        description: "Old description",
+        mergeStrategy: "BOTH",
+        tags: ["Preferences"],
+        isIdProperty: false,
+        range: { min: 0, max: 100 },
+        useValidation: true,
+        creationDate: "2026-01-01T00:00:00.000Z",
+        creator: { userName: "system" },
+        links: [{ href: "https://example.com/rest/v2/profileProperties/favorite_color" }]
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      }));
+    const { makeApiCall } = await loadApiClientModule(mockFetch);
+
+    await expect(makeApiCall(
+      "https://example.com",
+      "token",
+      "PUT",
+      "/profileProperties/{propertyId}",
+      "1.0.2",
+      "createUpdateProfileOrGroupProperty",
+      { propertyId: "favorite_color" },
+      {},
+      { description: "New description" },
+      "application/json",
+      true,
+      {
+        readPath: "/profileProperties/{propertyId}",
+        readToolName: "getOneProfileOrGroupProperty",
+        requestBodyAllowedFields: [
+          "description",
+          "id",
+          "mergeStrategy",
+          "name",
+          "tags"
+        ],
+        requestBodySchema: {
+          type: "object",
+          properties: {
+            creationDate: { type: "string", readOnly: true },
+            creator: { type: "object", readOnly: true },
+            description: { type: "string" },
+            id: { type: "string" },
+            isIdProperty: { type: "boolean" },
+            mergeStrategy: { type: "string" },
+            name: { type: "string" },
+            range: { type: "object", readOnly: true },
+            tags: { type: "array", items: { type: "string" } }
+          }
+        }
+      },
+      "read-token"
+    )).resolves.toEqual({ ok: true });
+
+    const [readUrl, readRequestInit] = mockFetch.mock.calls[0];
+    expect(String(readUrl)).toBe("https://example.com/rest/v2/profileProperties/favorite_color");
+    expect(readRequestInit?.method).toBe("GET");
+    expect((readRequestInit?.headers as Record<string, string>)["X-BlueConic-MCP-Tool-Call"]).toBe(
+      "getOneProfileOrGroupProperty"
+    );
+    expect((readRequestInit?.headers as Record<string, string>).Authorization).toBe("Bearer read-token");
+
+    const [, updateRequestInit] = mockFetch.mock.calls[1];
+    expect((updateRequestInit?.headers as Record<string, string>).Authorization).toBe("Bearer token");
+    expect(JSON.parse(String(updateRequestInit?.body))).toEqual({
+      id: "favorite_color",
+      name: "Favorite color",
+      description: "New description",
+      mergeStrategy: "BOTH",
+      tags: ["Preferences"]
+    });
+  });
+
+  it("keeps the original update body when there is no existing configuration", async () => {
+    const mockFetch = jest
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response("not found", { status: 404 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      }));
+    const { makeApiCall } = await loadApiClientModule(mockFetch);
+
+    await makeApiCall(
+      "https://example.com",
+      "token",
+      "PUT",
+      "/profileProperties/{propertyId}",
+      "1.0.2",
+      "createUpdateProfileOrGroupProperty",
+      { propertyId: "new_property" },
+      {},
+      { id: "new_property", name: "New property", useValidation: true },
+      "application/json",
+      true,
+      {
+        readPath: "/profileProperties/{propertyId}",
+        readToolName: "getOneProfileOrGroupProperty",
+        requestBodyAllowedFields: ["id", "name"]
+      }
+    );
+
+    const [, updateRequestInit] = mockFetch.mock.calls[1];
+    expect(JSON.parse(String(updateRequestInit?.body))).toEqual({
+      id: "new_property",
+      name: "New property"
+    });
+  });
+
+  it("retains existing multipart metadata while preserving binary updates", async () => {
+    const mockFetch = jest
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: "model-1",
+        name: "Existing model",
+        type: "GENERAL",
+        tags: ["Models"],
+        creationDate: "2026-01-01T00:00:00.000Z",
+        modelHash: "server-managed"
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      }));
+    const { makeApiCall } = await loadApiClientModule(mockFetch);
+
+    await makeApiCall(
+      "https://example.com",
+      "token",
+      "PUT",
+      "/models/{model}",
+      "1.0.2",
+      "updateModel",
+      { model: "model-1" },
+      {},
+      {
+        metadata: { description: "Updated model" },
+        model: {
+          base64: Buffer.from("updated-onnx").toString("base64"),
+          contentType: "application/octet-stream",
+          filename: "model.onnx"
+        }
+      },
+      "multipart/form-data",
+      true,
+      {
+        readPath: "/models/{model}",
+        readToolName: "getOneModelMetadata",
+        requestBodyPath: ["metadata"],
+        requestBodySchema: {
+          type: "object",
+          properties: {
+            metadata: {
+              type: "object",
+              properties: {
+                creationDate: { type: "string", readOnly: true },
+                description: { type: "string" },
+                id: { type: "string" },
+                modelHash: { type: "string", readOnly: true },
+                name: { type: "string" },
+                tags: { type: "array", items: { type: "string" } },
+                type: { type: "string" }
+              }
+            },
+            model: { type: "string" }
+          }
+        }
+      }
+    );
+
+    const [, updateRequestInit] = mockFetch.mock.calls[1];
+    const body = updateRequestInit?.body as FormData;
+    const metadata = body.get("metadata") as Blob;
+    const model = body.get("model") as Blob & { name?: string };
+
+    await expect(metadata.text()).resolves.toBe(JSON.stringify({
+      id: "model-1",
+      name: "Existing model",
+      type: "GENERAL",
+      tags: ["Models"],
+      description: "Updated model"
+    }));
+    await expect(model.text()).resolves.toBe("updated-onnx");
+    expect(model.name).toBe("model.onnx");
+  });
+
+  it("retains existing configuration for content store items by item id", async () => {
+    const mockFetch = jest
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        items: [{
+          id: "article-1",
+          name: "Existing article",
+          description: "Old article",
+          properties: [
+            { id: "category", values: ["Business"] },
+            { id: "creator", values: ["BlueConic"] }
+          ],
+          creationDate: "2026-01-01T00:00:00.000Z",
+          statistics: { view: 12 }
+        }]
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      }));
+    const { makeApiCall } = await loadApiClientModule(mockFetch);
+
+    await makeApiCall(
+      "https://example.com",
+      "token",
+      "PUT",
+      "/contentStores/{contentStore}/items",
+      "1.0.2",
+      "addContentItemsToStore",
+      { contentStore: "store-1" },
+      {},
+      {
+        items: [{
+          id: "article-1",
+          description: "Updated article",
+          properties: [{ id: "category", values: ["Technology"] }]
+        }]
+      },
+      "application/json",
+      true,
+      {
+        readPath: "/contentStores/{contentStore}/items",
+        readQueryFromRequestBodyItems: {
+          count: 1,
+          itemIdField: "id",
+          operator: "==",
+          queryParam: "filterValue"
+        },
+        readResponseBodyPath: ["items"],
+        readToolName: "getContentItemsFromStore",
+        requestBodyPath: ["items"],
+        requestBodySchema: {
+          type: "object",
+          properties: {
+            items: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  creationDate: { type: "string", readOnly: true },
+                  description: { type: "string" },
+                  id: { type: "string" },
+                  name: { type: "string" },
+                  properties: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string" },
+                        values: { type: "array", items: { type: "string" } }
+                      }
+                    }
+                  },
+                  statistics: { type: "object", readOnly: true }
+                }
+              }
+            }
+          }
+        }
+      }
+    );
+
+    const [readUrl] = mockFetch.mock.calls[0];
+    const parsedReadUrl = new URL(String(readUrl));
+    expect(parsedReadUrl.searchParams.get("filterValue")).toBe("id==article-1");
+    expect(parsedReadUrl.searchParams.get("count")).toBe("1");
+
+    const [, updateRequestInit] = mockFetch.mock.calls[1];
+    expect(JSON.parse(String(updateRequestInit?.body))).toEqual({
+      items: [{
+        id: "article-1",
+        name: "Existing article",
+        description: "Updated article",
+        properties: [
+          { id: "category", values: ["Technology"] },
+          { id: "creator", values: ["BlueConic"] }
+        ]
+      }]
+    });
+  });
 });

@@ -43,6 +43,58 @@ export class BlueConicHttpError extends Error {
   }
 }
 
+function getStringField(value: unknown, field: string): string | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const fieldValue = (value as Record<string, unknown>)[field];
+  return typeof fieldValue === "string" ? fieldValue : undefined;
+}
+
+function sanitizeUpstreamMessage(message: string): string {
+  return message.replace(/\s+/g, " ").trim().slice(0, 300);
+}
+
+function getUpstreamErrorMessage(responseBody?: string): string | undefined {
+  if (!responseBody) {
+    return undefined;
+  }
+
+  try {
+    const parsedBody = JSON.parse(responseBody) as unknown;
+    const message =
+      getStringField(parsedBody, "message") ??
+      getStringField(parsedBody, "error_description");
+
+    if (message) {
+      return sanitizeUpstreamMessage(message);
+    }
+
+    const errorValue = typeof parsedBody === "object" && parsedBody !== null && !Array.isArray(parsedBody)
+      ? (parsedBody as Record<string, unknown>).error
+      : undefined;
+
+    if (typeof errorValue === "string") {
+      return sanitizeUpstreamMessage(errorValue);
+    }
+
+    if (typeof errorValue === "object" && errorValue !== null && !Array.isArray(errorValue)) {
+      const nestedMessage = getStringField(errorValue, "message");
+      return nestedMessage ? sanitizeUpstreamMessage(nestedMessage) : undefined;
+    }
+  } catch {
+    const trimmedBody = responseBody.trim();
+    if (!trimmedBody || trimmedBody.startsWith("<")) {
+      return undefined;
+    }
+
+    return sanitizeUpstreamMessage(trimmedBody);
+  }
+
+  return undefined;
+}
+
 export function getClientFacingErrorMessage(
   error: unknown,
   fallbackMessage = "BlueConic could not complete this request. Please try again later."
@@ -57,7 +109,15 @@ export function getClientFacingErrorMessage(
 
   if (error instanceof BlueConicHttpError) {
     if (error.status === 400) {
-      return "BlueConic could not process this request. Please review the tool inputs and try again.";
+      const upstreamMessage = getUpstreamErrorMessage(error.responseBody);
+
+      if (error.operation === "POST /rest/v2/oauth/token") {
+        return "BlueConic rejected the requested OAuth scopes. Grant the OAuth application the scopes required by this tool and try again.";
+      }
+
+      return upstreamMessage
+        ? `BlueConic could not process this request: ${upstreamMessage}`
+        : "BlueConic could not process this request. Please review the tool inputs and try again.";
     }
 
     if (error.status === 401 || error.status === 403) {

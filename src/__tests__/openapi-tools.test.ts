@@ -59,20 +59,51 @@ describe("APPROVED_OPERATION_POLICIES", () => {
       `${method.toUpperCase()} ${path} :: ${operationId}`
     );
 
-    expect(APPROVED_OPERATION_POLICIES).toHaveLength(61);
-    expect(new Set(policyKeys).size).toBe(61);
+    expect(APPROVED_OPERATION_POLICIES).toHaveLength(55);
+    expect(new Set(policyKeys).size).toBe(55);
     expect(policyKeys).toEqual(expect.arrayContaining([
       "GET /profiles :: searchProfiles",
-      "PUT /profiles :: createUpdateDeleteProfiles",
       "POST /contentStores :: createContentStore",
-      "DELETE /models/{model} :: deleteModel",
+      "POST /models :: createModel",
+      "PUT /profileProperties/{propertyId} :: createUpdateProfileOrGroupProperty",
       "POST /interactionEvents :: createEvent"
     ]));
     expect(policyKeys).not.toEqual(expect.arrayContaining([
+      "DELETE /contentStores/{contentStore}/items/bulk :: deleteContentItemsFromStore",
+      "PUT /contentStores/{contentStore} :: updateContentStore",
+      "DELETE /models/{model} :: deleteModel",
+      "PUT /profiles :: createUpdateDeleteProfiles",
+      "PUT /groups :: createUpdateDeleteGroups",
+      "DELETE /profileProperties/{propertyId} :: deleteProfileOrGroupProperty",
       "GET /oauth/authorize :: startAuthorizationCodeFlow",
       "POST /oauth/revoke :: revokeToken",
       "POST /oauth/token :: getToken"
     ]));
+  });
+
+  it("assigns explicit risk and confirmation policy to every reviewed operation", () => {
+    expect(APPROVED_OPERATION_POLICIES.every((policy) => typeof policy.risk === "string")).toBe(true);
+    expect(APPROVED_OPERATION_POLICIES.every((policy) => typeof policy.requiresConfirmation === "boolean")).toBe(true);
+
+    expect(APPROVED_OPERATION_POLICIES.find((policy) =>
+      policy.operationId === "searchProfiles"
+    )).toMatchObject({
+      risk: "read",
+      requiresConfirmation: false
+    });
+    expect(APPROVED_OPERATION_POLICIES.find((policy) =>
+      policy.operationId === "createModel"
+    )).toMatchObject({
+      risk: "additive_write",
+      requiresConfirmation: false
+    });
+    expect(APPROVED_OPERATION_POLICIES.find((policy) =>
+      policy.operationId === "addContentItemsToStore"
+    )).toMatchObject({
+      risk: "destructive_write",
+      requiresConfirmation: true,
+      maxBatchSize: 100
+    });
   });
 });
 
@@ -97,6 +128,9 @@ describe("filterApprovedOpenApiSpec", () => {
           put: { summary: "Update profile", operationId: "createUpdateDeleteProfiles" },
           post: { summary: "Unexpected profile write", operationId: "unexpectedProfileWrite" }
         },
+        "/models": {
+          post: { summary: "Create model", operationId: "createModel" }
+        },
         "/segments": {
           get: { summary: "Wrong operation name", operationId: "listSegments" }
         }
@@ -110,8 +144,8 @@ describe("filterApprovedOpenApiSpec", () => {
       "/users": {
         get: { summary: "List users", operationId: "getAllUsers" }
       },
-      "/profiles": {
-        put: { summary: "Update profile", operationId: "createUpdateDeleteProfiles" }
+      "/models": {
+        post: { summary: "Create model", operationId: "createModel" }
       }
     });
   });
@@ -134,6 +168,20 @@ describe("buildToolsFromSpec", () => {
             operationId: "createEvent"
           }
         },
+        "/models": {
+          post: {
+            summary: "Create model",
+            operationId: "createModel",
+            security: [{ oauth2: ["write:models"] }]
+          }
+        },
+        "/profileProperties/{propertyId}": {
+          put: {
+            summary: "Create or update property",
+            operationId: "createUpdateProfileOrGroupProperty",
+            security: [{ oauth2: ["write:profile-properties"] }]
+          }
+        },
         "/profiles": {
           put: {
             summary: "Create, update, or delete profiles",
@@ -141,7 +189,7 @@ describe("buildToolsFromSpec", () => {
             security: [{ oauth2: ["write:profiles"] }]
           }
         },
-        "/profileProperties/{propertyId}": {
+        "/removedProfileProperties/{propertyId}": {
           delete: {
             summary: "Delete property",
             operationId: "deleteProfileOrGroupProperty",
@@ -175,26 +223,48 @@ describe("buildToolsFromSpec", () => {
         name: "createEvent",
         path: "/interactionEvents",
         requiredScopes: [],
-        requiresAuth: false
-      }),
-      expect.objectContaining({
-        name: "createUpdateDeleteProfiles",
-        path: "/profiles",
-        requiredScopes: ["write:profiles"],
-        annotations: expect.objectContaining({
-          readOnlyHint: false,
-          destructiveHint: true,
-          idempotentHint: true
+        requiresAuth: false,
+        risk: "additive_write",
+        requiresConfirmation: false,
+        description: expect.stringContaining("WARNING: This tool modifies live BlueConic data."),
+        inputSchema: expect.objectContaining({
+          properties: expect.objectContaining({
+            dryRun: expect.objectContaining({ type: "boolean" })
+          })
         })
       }),
       expect.objectContaining({
-        name: "deleteProfileOrGroupProperty",
+        name: "createModel",
+        path: "/models",
+        requiredScopes: ["write:models"],
+        risk: "additive_write",
+        requiresConfirmation: false,
+        annotations: expect.objectContaining({
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false
+        })
+      }),
+      expect.objectContaining({
+        name: "createUpdateProfileOrGroupProperty",
         path: "/profileProperties/{propertyId}",
         requiredScopes: ["write:profile-properties"],
+        risk: "destructive_write",
+        requiresConfirmation: true,
         annotations: expect.objectContaining({
           readOnlyHint: false,
           destructiveHint: true,
           idempotentHint: true
+        }),
+        description: expect.stringContaining("Execution requires user confirmation"),
+        inputSchema: expect.objectContaining({
+          properties: expect.objectContaining({
+            confirmationToken: expect.objectContaining({
+              type: "string",
+              description: expect.stringContaining("top level of the tool arguments")
+            }),
+            dryRun: expect.objectContaining({ type: "boolean" })
+          })
         })
       })
     ]);
@@ -204,6 +274,93 @@ describe("buildToolsFromSpec", () => {
     const currentTenantSpec = buildSpecFromApprovedPolicies();
 
     expect(buildToolsFromSpec(currentTenantSpec)).toHaveLength(APPROVED_OPERATION_POLICIES.length);
+  });
+
+  it("adds retained-configuration policies to update tools", () => {
+    const dynamicTools = buildToolsFromSpec(buildSpecFromApprovedPolicies());
+    const toolsByName = new Map(dynamicTools.map((tool) => [tool.name, tool]));
+
+    expect(toolsByName.get("createUpdateProfileOrGroupProperty")?.retainExistingConfiguration).toMatchObject({
+      readPath: "/profileProperties/{propertyId}",
+      readToolName: "getOneProfileOrGroupProperty",
+      requestBodyAllowedFields: expect.arrayContaining([
+        "availableForSegmentation",
+        "filterType",
+        "id",
+        "mergeStrategy",
+        "name",
+        "tags"
+      ]),
+      requiredScopes: ["read:profile-properties"]
+    });
+    expect(toolsByName.get("updateModel")?.retainExistingConfiguration).toMatchObject({
+      readPath: "/models/{model}",
+      readToolName: "getOneModelMetadata",
+      requestBodyPath: ["metadata"],
+      requiredScopes: ["read:models"]
+    });
+    expect(toolsByName.get("updateURLMapping")?.retainExistingConfiguration).toMatchObject({
+      readPath: "/urlmappings/{id}",
+      readToolName: "getOneURLMapping",
+      requiredScopes: ["read:url-mappings"]
+    });
+    expect(toolsByName.get("addContentItemsToStore")?.retainExistingConfiguration).toMatchObject({
+      readPath: "/contentStores/{contentStore}/items",
+      readResponseBodyPath: ["items"],
+      requestBodyPath: ["items"],
+      requiredScopes: ["read:content_stores"]
+    });
+  });
+
+  it("exposes the correct risk-specific argument surface for every generated tool", () => {
+    const dynamicTools = buildToolsFromSpec(buildSpecFromApprovedPolicies());
+
+    const readTools = dynamicTools.filter((tool) => tool.risk === "read");
+    const additiveWriteTools = dynamicTools.filter((tool) => tool.risk === "additive_write");
+    const destructiveWriteTools = dynamicTools.filter((tool) => tool.risk === "destructive_write");
+
+    expect(readTools).not.toHaveLength(0);
+    expect(additiveWriteTools.map((tool) => tool.name).sort()).toEqual([
+      "createContentStore",
+      "createEvent",
+      "createModel",
+      "createPageviewEvent",
+      "createURLMapping"
+    ]);
+    expect(destructiveWriteTools.map((tool) => tool.name).sort()).toEqual([
+      "addContentItemsToStore",
+      "createUpdateProfileOrGroupProperty",
+      "updateModel",
+      "updateURLMapping"
+    ]);
+
+    expect(readTools.every((tool) =>
+      tool.annotations.readOnlyHint &&
+      !tool.annotations.destructiveHint &&
+      !tool.inputSchema.properties.dryRun &&
+      !tool.inputSchema.properties.confirmationToken
+    )).toBe(true);
+
+    expect(additiveWriteTools.every((tool) =>
+      !tool.requiresConfirmation &&
+      !tool.annotations.readOnlyHint &&
+      !tool.annotations.destructiveHint &&
+      tool.description.includes("WARNING: This tool modifies live BlueConic data.") &&
+      tool.description.includes("Use dryRun: true") &&
+      tool.inputSchema.properties.dryRun?.type === "boolean" &&
+      !tool.inputSchema.properties.confirmationToken
+    )).toBe(true);
+
+    expect(destructiveWriteTools.every((tool) =>
+      tool.requiresConfirmation &&
+      !tool.annotations.readOnlyHint &&
+      tool.annotations.destructiveHint &&
+      tool.description.includes("WARNING: This is a destructive BlueConic write.") &&
+      tool.inputSchema.properties.dryRun?.type === "boolean" &&
+      tool.inputSchema.properties.confirmationToken?.type === "string" &&
+      String(tool.inputSchema.properties.confirmationToken.description).includes("top level of the tool arguments") &&
+      String(tool.inputSchema.properties.confirmationToken.description).includes("Do not put confirmationToken inside requestBody.")
+    )).toBe(true);
   });
 });
 

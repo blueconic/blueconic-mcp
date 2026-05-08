@@ -1,5 +1,13 @@
 import { fetchWithTimeout } from "./http.js";
 import { BlueConicHttpError } from "./errors.js";
+import {
+  buildToolDescription,
+  CONFIRMATION_TOKEN_PLACEMENT_MESSAGE,
+  getOperationAnnotations,
+  type OperationSafetyPolicy,
+  type ToolAnnotations
+} from "./safety.js";
+import type { ExistingConfigurationRetentionPolicy } from "./api-client.js";
 
 export type InputSchema = {
   properties: Record<string, Record<string, unknown>>;
@@ -43,10 +51,11 @@ const REQUEST_BODY_CONTENT_TYPES = [
 
 type SupportedHttpMethod = typeof SUPPORTED_HTTP_METHODS[number];
 type RequestBodyContentType = typeof REQUEST_BODY_CONTENT_TYPES[number];
-type ApprovedOperationPolicy = {
+type ApprovedOperationPolicy = OperationSafetyPolicy & {
   method: SupportedHttpMethod;
   operationId: string;
   path: string;
+  retainExistingConfiguration?: Omit<ExistingConfigurationRetentionPolicy, "requestBodySchema">;
   /** Set to false only for reviewed OpenAPI operations that intentionally do not use OAuth. */
   requiresAuth?: boolean;
   requiredScopes: readonly string[];
@@ -57,41 +66,57 @@ type ApprovedOperationGroup = {
 };
 
 export type DynamicTool = {
-  annotations: {
-    destructiveHint: boolean;
-    idempotentHint: boolean;
-    openWorldHint: boolean;
-    readOnlyHint: boolean;
-  };
+  annotations: ToolAnnotations;
   description: string;
   inputSchema: InputSchema;
+  maxBatchSize?: number;
   method: string;
   name: string;
   path: string;
+  retainExistingConfiguration?: ExistingConfigurationRetentionPolicy;
   requestBodyContentType?: RequestBodyContentType;
   requiredScopes: string[];
+  requiresConfirmation: boolean;
   requiresAuth: boolean;
+  risk: OperationSafetyPolicy["risk"];
 };
 
 export let tools: DynamicTool[] = [];
+
+const READ_OPERATION_POLICY = {
+  requiresConfirmation: false,
+  risk: "read"
+} as const satisfies OperationSafetyPolicy;
+
+const ADDITIVE_WRITE_OPERATION_POLICY = {
+  requiresConfirmation: false,
+  risk: "additive_write"
+} as const satisfies OperationSafetyPolicy;
+
+const DESTRUCTIVE_WRITE_OPERATION_POLICY = {
+  requiresConfirmation: true,
+  risk: "destructive_write"
+} as const satisfies OperationSafetyPolicy;
 
 export const APPROVED_READ_OPERATION_GROUPS = [
   {
     name: "Audit events",
     operations: [
-      { method: "get", path: "/auditEvents", operationId: "getAuditEvents", requiredScopes: ["read:audit-events"] }
+      { ...READ_OPERATION_POLICY, method: "get", path: "/auditEvents", operationId: "getAuditEvents", requiredScopes: ["read:audit-events"] }
     ]
   },
   {
     name: "Content stores",
     operations: [
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/contentStores/{contentStore}/items",
         operationId: "getContentItemsFromStore",
         requiredScopes: ["read:content_stores"]
       },
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/contentStores",
         operationId: "getAllContentStores",
@@ -102,37 +127,41 @@ export const APPROVED_READ_OPERATION_GROUPS = [
   {
     name: "Connections and experiences",
     operations: [
-      { method: "get", path: "/connections", operationId: "getAllConnections", requiredScopes: ["read:connections"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/connections", operationId: "getAllConnections", requiredScopes: ["read:connections"] },
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/connections/{connection}",
         operationId: "getOneConnection",
         requiredScopes: ["read:connections"]
       },
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/connections/{connection}/runs",
         operationId: "getConnectionRuns",
         requiredScopes: ["read:connections"]
       },
-      { method: "get", path: "/dialogues", operationId: "getAllDialogues", requiredScopes: ["read:dialogues"] },
-      { method: "get", path: "/dialogues/{dialogue}", operationId: "getOneDialogue", requiredScopes: ["read:dialogues"] },
-      { method: "get", path: "/listeners", operationId: "getAllListeners", requiredScopes: ["read:listeners"] },
-      { method: "get", path: "/listeners/{listener}", operationId: "getOneListener", requiredScopes: ["read:listeners"] },
-      { method: "get", path: "/plugins/{plugin}", operationId: "getOnePlugin", requiredScopes: ["read:plugins"] },
-      { method: "get", path: "/plugins", operationId: "getAllPlugins", requiredScopes: ["read:plugins"] },
-      { method: "get", path: "/channels", operationId: "getAllChannels", requiredScopes: ["read:channels"] },
-      { method: "get", path: "/channels/{channelId}", operationId: "getOneChannel", requiredScopes: ["read:channels"] },
-      { method: "get", path: "/interactions", operationId: "getInteractions", requiresAuth: false, requiredScopes: [] },
-      { method: "get", path: "/lifecycles", operationId: "getAllLifecycles", requiredScopes: ["read:lifecycles"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/dialogues", operationId: "getAllDialogues", requiredScopes: ["read:dialogues"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/dialogues/{dialogue}", operationId: "getOneDialogue", requiredScopes: ["read:dialogues"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/listeners", operationId: "getAllListeners", requiredScopes: ["read:listeners"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/listeners/{listener}", operationId: "getOneListener", requiredScopes: ["read:listeners"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/plugins/{plugin}", operationId: "getOnePlugin", requiredScopes: ["read:plugins"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/plugins", operationId: "getAllPlugins", requiredScopes: ["read:plugins"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/channels", operationId: "getAllChannels", requiredScopes: ["read:channels"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/channels/{channelId}", operationId: "getOneChannel", requiredScopes: ["read:channels"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/interactions", operationId: "getInteractions", requiresAuth: false, requiredScopes: [] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/lifecycles", operationId: "getAllLifecycles", requiredScopes: ["read:lifecycles"] },
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/lifecycles/{lifecycle}",
         operationId: "getOneLifecycle",
         requiredScopes: ["read:lifecycles"]
       },
-      { method: "get", path: "/objectives", operationId: "getAllObjectives", requiredScopes: ["read:objectives"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/objectives", operationId: "getAllObjectives", requiredScopes: ["read:objectives"] },
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/objectives/{objective}",
         operationId: "getOneObjective",
@@ -143,72 +172,81 @@ export const APPROVED_READ_OPERATION_GROUPS = [
   {
     name: "Models",
     operations: [
-      { method: "get", path: "/models", operationId: "getAllModels", requiredScopes: ["read:models"] },
-      { method: "get", path: "/models/{model}", operationId: "getOneModelMetadata", requiredScopes: ["read:models"] },
-      { method: "get", path: "/models/{model}/model", operationId: "getModelONNXBinary", requiredScopes: ["read:models"] }
+      { ...READ_OPERATION_POLICY, method: "get", path: "/models", operationId: "getAllModels", requiredScopes: ["read:models"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/models/{model}", operationId: "getOneModelMetadata", requiredScopes: ["read:models"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/models/{model}/model", operationId: "getModelONNXBinary", requiredScopes: ["read:models"] }
     ]
   },
   {
     name: "Profiles, groups, and segments",
     operations: [
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/groups/{grouptype}/{group}",
         operationId: "getOneGroupOfGroupType",
         requiredScopes: ["read:groups"]
       },
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/groups/{grouptype}",
         operationId: "getAllGroupsByGroupType",
         requiredScopes: ["read:groups"]
       },
-      { method: "get", path: "/groupTypes", operationId: "getAllGroupTypes", requiredScopes: ["read:group-types"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/groupTypes", operationId: "getAllGroupTypes", requiredScopes: ["read:group-types"] },
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/profileEvents/{profileId}",
         operationId: "getProfileEvents",
         requiredScopes: ["read:profiles"]
       },
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/profileProperties/{propertyId}",
         operationId: "getOneProfileOrGroupProperty",
         requiredScopes: ["read:profile-properties"]
       },
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/profileProperties",
         operationId: "getAllProfileOrGroupProperties",
         requiredScopes: ["read:profile-properties"]
       },
-      { method: "get", path: "/profiles", operationId: "searchProfiles", requiredScopes: ["read:profiles"] },
-      { method: "get", path: "/profiles/{profileId}", operationId: "getOneProfile", requiredScopes: ["read:profiles"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/profiles", operationId: "searchProfiles", requiredScopes: ["read:profiles"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/profiles/{profileId}", operationId: "getOneProfile", requiredScopes: ["read:profiles"] },
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/segments/{segment}/profiles",
         operationId: "getProfilesInSegment",
         requiredScopes: ["read:segments"]
       },
-      { method: "get", path: "/segments", operationId: "getAllSegments", requiredScopes: ["read:segments"] }
+      { ...READ_OPERATION_POLICY, method: "get", path: "/segments", operationId: "getAllSegments", requiredScopes: ["read:segments"] }
     ]
   },
   {
     name: "Timeline, recommendations, and reporting",
     operations: [
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/timelineEventTypes/{timelineEventType}",
         operationId: "getOneTimelineEventType",
         requiredScopes: ["read:timeline-event-types"]
       },
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/timelineEventTypes",
         operationId: "getTimelineEventTypes",
         requiredScopes: ["read:timeline-event-types"]
       },
       {
+        ...READ_OPERATION_POLICY,
         method: "post",
         path: "/recommendations",
         operationId: "getRecommendationsPostJsonpAsync",
@@ -216,18 +254,21 @@ export const APPROVED_READ_OPERATION_GROUPS = [
         requiredScopes: []
       },
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/reporting/dialogues",
         operationId: "getDialogueStatistics",
         requiredScopes: ["read:dialogues"]
       },
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/timelineEventRollups",
         operationId: "getAllRollups",
         requiredScopes: ["read:timeline_event_rollups"]
       },
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/timelineEventRollups/{rollup}",
         operationId: "getOneRollup",
@@ -238,19 +279,20 @@ export const APPROVED_READ_OPERATION_GROUPS = [
   {
     name: "URL mappings",
     operations: [
-      { method: "get", path: "/urlmappings/{id}", operationId: "getOneURLMapping", requiredScopes: ["read:url-mappings"] }
+      { ...READ_OPERATION_POLICY, method: "get", path: "/urlmappings/{id}", operationId: "getOneURLMapping", requiredScopes: ["read:url-mappings"] }
     ]
   },
   {
     name: "Administration and notebooks",
     operations: [
-      { method: "get", path: "/roles", operationId: "getAllRoles", requiredScopes: ["read:roles"] },
-      { method: "get", path: "/roles/{role}", operationId: "getOneRole", requiredScopes: ["read:roles"] },
-      { method: "get", path: "/users", operationId: "getAllUsers", requiredScopes: ["read:users"] },
-      { method: "get", path: "/users/{user}", operationId: "getOneUser", requiredScopes: ["read:users"] },
-      { method: "get", path: "/notebooks", operationId: "getAllNotebooks", requiredScopes: ["read:notebooks"] },
-      { method: "get", path: "/notebooks/{notebook}", operationId: "getOneNotebook", requiredScopes: ["read:notebooks"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/roles", operationId: "getAllRoles", requiredScopes: ["read:roles"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/roles/{role}", operationId: "getOneRole", requiredScopes: ["read:roles"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/users", operationId: "getAllUsers", requiredScopes: ["read:users"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/users/{user}", operationId: "getOneUser", requiredScopes: ["read:users"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/notebooks", operationId: "getAllNotebooks", requiredScopes: ["read:notebooks"] },
+      { ...READ_OPERATION_POLICY, method: "get", path: "/notebooks/{notebook}", operationId: "getOneNotebook", requiredScopes: ["read:notebooks"] },
       {
+        ...READ_OPERATION_POLICY,
         method: "get",
         path: "/notebooks/{notebook}/runs",
         operationId: "getNotebookRunHistory",
@@ -265,27 +307,31 @@ export const APPROVED_WRITE_OPERATION_GROUPS = [
     name: "Content store writes",
     operations: [
       {
+        ...DESTRUCTIVE_WRITE_OPERATION_POLICY,
+        maxBatchSize: 100,
         method: "put",
         path: "/contentStores/{contentStore}/items",
         operationId: "addContentItemsToStore",
+        retainExistingConfiguration: {
+          readPath: "/contentStores/{contentStore}/items",
+          readQueryFromRequestBodyItems: {
+            count: 1,
+            itemIdField: "id",
+            operator: "==",
+            queryParam: "filterValue"
+          },
+          readResponseBodyPath: ["items"],
+          readToolName: "getContentItemsFromStore",
+          requestBodyPath: ["items"],
+          requiredScopes: ["read:content_stores"]
+        },
         requiredScopes: ["write:content_stores"]
       },
       {
+        ...ADDITIVE_WRITE_OPERATION_POLICY,
         method: "post",
         path: "/contentStores",
         operationId: "createContentStore",
-        requiredScopes: ["write:content_stores"]
-      },
-      {
-        method: "delete",
-        path: "/contentStores/{contentStore}/items/bulk",
-        operationId: "deleteContentItemsFromStore",
-        requiredScopes: ["write:content_stores"]
-      },
-      {
-        method: "put",
-        path: "/contentStores/{contentStore}",
-        operationId: "updateContentStore",
         requiredScopes: ["write:content_stores"]
       }
     ]
@@ -293,8 +339,16 @@ export const APPROVED_WRITE_OPERATION_GROUPS = [
   {
     name: "Event registration writes",
     operations: [
-      { method: "post", path: "/interactionEvents", operationId: "createEvent", requiresAuth: false, requiredScopes: [] },
       {
+        ...ADDITIVE_WRITE_OPERATION_POLICY,
+        method: "post",
+        path: "/interactionEvents",
+        operationId: "createEvent",
+        requiresAuth: false,
+        requiredScopes: []
+      },
+      {
+        ...ADDITIVE_WRITE_OPERATION_POLICY,
         method: "post",
         path: "/pageviewEvents",
         operationId: "createPageviewEvent",
@@ -306,35 +360,76 @@ export const APPROVED_WRITE_OPERATION_GROUPS = [
   {
     name: "Model writes",
     operations: [
-      { method: "post", path: "/models", operationId: "createModel", requiredScopes: ["write:models"] },
-      { method: "put", path: "/models/{model}", operationId: "updateModel", requiredScopes: ["write:models"] },
-      { method: "delete", path: "/models/{model}", operationId: "deleteModel", requiredScopes: ["write:models"] }
+      { ...ADDITIVE_WRITE_OPERATION_POLICY, method: "post", path: "/models", operationId: "createModel", requiredScopes: ["write:models"] },
+      {
+        ...DESTRUCTIVE_WRITE_OPERATION_POLICY,
+        method: "put",
+        path: "/models/{model}",
+        operationId: "updateModel",
+        retainExistingConfiguration: {
+          readPath: "/models/{model}",
+          readToolName: "getOneModelMetadata",
+          requestBodyPath: ["metadata"],
+          requiredScopes: ["read:models"]
+        },
+        requiredScopes: ["write:models"]
+      }
     ]
   },
   {
     name: "Profile and group writes",
     operations: [
-      { method: "put", path: "/groups", operationId: "createUpdateDeleteGroups", requiredScopes: ["write:groups"] },
       {
+        ...DESTRUCTIVE_WRITE_OPERATION_POLICY,
         method: "put",
         path: "/profileProperties/{propertyId}",
         operationId: "createUpdateProfileOrGroupProperty",
+        retainExistingConfiguration: {
+          readPath: "/profileProperties/{propertyId}",
+          readToolName: "getOneProfileOrGroupProperty",
+          requestBodyAllowedFields: [
+            "availableForSegmentation",
+            "canRead",
+            "canWrite",
+            "createNewProfile",
+            "currency",
+            "dataSensitivity",
+            "description",
+            "filterType",
+            "groupTypeId",
+            "id",
+            "indexed",
+            "mergeStrategy",
+            "name",
+            "permissionLevel",
+            "precision",
+            "showInUI",
+            "tags",
+            "unit",
+            "values"
+          ],
+          requiredScopes: ["read:profile-properties"]
+        },
         requiredScopes: ["write:profile-properties"]
-      },
-      {
-        method: "delete",
-        path: "/profileProperties/{propertyId}",
-        operationId: "deleteProfileOrGroupProperty",
-        requiredScopes: ["write:profile-properties"]
-      },
-      { method: "put", path: "/profiles", operationId: "createUpdateDeleteProfiles", requiredScopes: ["write:profiles"] }
+      }
     ]
   },
   {
     name: "URL mapping writes",
     operations: [
-      { method: "post", path: "/urlmappings", operationId: "createURLMapping", requiredScopes: ["write:url-mappings"] },
-      { method: "put", path: "/urlmappings/{id}", operationId: "updateURLMapping", requiredScopes: ["write:url-mappings"] }
+      { ...ADDITIVE_WRITE_OPERATION_POLICY, method: "post", path: "/urlmappings", operationId: "createURLMapping", requiredScopes: ["write:url-mappings"] },
+      {
+        ...DESTRUCTIVE_WRITE_OPERATION_POLICY,
+        method: "put",
+        path: "/urlmappings/{id}",
+        operationId: "updateURLMapping",
+        retainExistingConfiguration: {
+          readPath: "/urlmappings/{id}",
+          readToolName: "getOneURLMapping",
+          requiredScopes: ["read:url-mappings"]
+        },
+        requiredScopes: ["write:url-mappings"]
+      }
     ]
   }
 ] as const satisfies readonly ApprovedOperationGroup[];
@@ -447,17 +542,38 @@ export function buildToolsFromSpec(openApiSpec: OpenApiSpec): DynamicTool[] {
       }
 
       const requestBodyContentType = getPreferredRequestBodyContentType(operation);
+      const requestBodySchema = getResolvedRequestBodySchema(operation, requestBodyContentType, openApiSpec);
+      const baseDescription = operation.summary || operation.description || `${method.toUpperCase()} ${path}`;
 
       dynamicTools.push({
-        annotations: getOperationAnnotations(approvedOperationPolicy.method, operation),
-        description: operation.summary || operation.description || `${method.toUpperCase()} ${path}`,
-        inputSchema: generateInputSchema(operation, path, approvedOperationPolicy.method, openApiSpec),
+        annotations: getOperationAnnotations(approvedOperationPolicy, approvedOperationPolicy.method),
+        description: buildToolDescription(baseDescription, approvedOperationPolicy),
+        inputSchema: generateInputSchema(
+          operation,
+          path,
+          approvedOperationPolicy.method,
+          openApiSpec,
+          approvedOperationPolicy
+        ),
+        ...(approvedOperationPolicy.maxBatchSize === undefined
+          ? {}
+          : { maxBatchSize: approvedOperationPolicy.maxBatchSize }),
         method: approvedOperationPolicy.method.toUpperCase(),
         name: generateToolName(approvedOperationPolicy.method, path, operation),
         path,
+        ...(approvedOperationPolicy.retainExistingConfiguration
+          ? {
+            retainExistingConfiguration: {
+              ...approvedOperationPolicy.retainExistingConfiguration,
+              requestBodySchema
+            }
+          }
+          : {}),
         requestBodyContentType,
         requiredScopes: [...approvedOperationPolicy.requiredScopes],
-        requiresAuth: approvedOperationPolicy.requiresAuth ?? true
+        requiresAuth: approvedOperationPolicy.requiresAuth ?? true,
+        requiresConfirmation: approvedOperationPolicy.requiresConfirmation,
+        risk: approvedOperationPolicy.risk
       });
     }
   }
@@ -469,25 +585,6 @@ function generateToolsFromSpec(openApiSpec: OpenApiSpec): void {
   tools = buildToolsFromSpec(openApiSpec);
 }
 
-function getOperationAnnotations(
-  method: SupportedHttpMethod,
-  operation: OpenApiOperation
-): DynamicTool["annotations"] {
-  const methodUpperCase = method.toUpperCase();
-  const operationText = [
-    operation.operationId,
-    operation.summary,
-    operation.description
-  ].filter(Boolean).join(" ").toLowerCase();
-
-  return {
-    readOnlyHint: method === "get",
-    destructiveHint: method === "delete" || /\b(delete|remove|revoke)\b/.test(operationText),
-    idempotentHint: ["GET", "PUT", "DELETE"].includes(methodUpperCase),
-    openWorldHint: false
-  };
-}
-
 function getPreferredRequestBodyContentType(operation: OpenApiOperation): RequestBodyContentType | undefined {
   const content = operation.requestBody?.content;
   if (!content) {
@@ -495,6 +592,20 @@ function getPreferredRequestBodyContentType(operation: OpenApiOperation): Reques
   }
 
   return REQUEST_BODY_CONTENT_TYPES.find((contentType) => content[contentType]);
+}
+
+function getResolvedRequestBodySchema(
+  operation: OpenApiOperation,
+  requestBodyContentType?: RequestBodyContentType,
+  openApiSpec?: OpenApiSpec
+): Record<string, unknown> | undefined {
+  const requestBodySchema = requestBodyContentType
+    ? operation.requestBody?.content?.[requestBodyContentType]?.schema
+    : undefined;
+
+  return requestBodySchema
+    ? resolveSchemaReference(requestBodySchema, openApiSpec)
+    : undefined;
 }
 
 function generateToolName(method: string, path: string, operation: OpenApiOperation): string {
@@ -516,7 +627,8 @@ export function generateInputSchema(
   operation: OpenApiOperation,
   path: string,
   method?: string,
-  openApiSpec?: OpenApiSpec
+  openApiSpec?: OpenApiSpec,
+  safetyPolicy?: OperationSafetyPolicy
 ): InputSchema {
   const required = new Set<string>();
   const schema: InputSchema = {
@@ -551,17 +663,29 @@ export function generateInputSchema(
     }
   }
 
+  if (safetyPolicy?.risk && safetyPolicy.risk !== "read") {
+    schema.properties.dryRun = {
+      type: "boolean",
+      description: "When true, preview the resolved BlueConic endpoint, estimated object count, risk, caps, and confirmation requirements without making a live API call."
+    };
+
+    if (safetyPolicy.requiresConfirmation) {
+      schema.properties.confirmationToken = {
+        type: "string",
+        description: `One-time confirmation token returned by the server for destructive writes when MCP elicitation is unavailable. ${CONFIRMATION_TOKEN_PLACEMENT_MESSAGE}`
+      };
+    }
+  }
+
   if (operation.requestBody && method && ["post", "put", "patch", "delete"].includes(method.toLowerCase())) {
     const requestBodyContentType = getPreferredRequestBodyContentType(operation);
-    const requestBodySchema = requestBodyContentType
-      ? operation.requestBody.content?.[requestBodyContentType]?.schema
-      : undefined;
+    const requestBodySchema = getResolvedRequestBodySchema(operation, requestBodyContentType, openApiSpec);
 
     if (requestBodySchema) {
       schema.properties.requestBody = {
         type: "object",
         description: `Request body payload (${requestBodyContentType})`,
-        ...resolveSchemaReference(requestBodySchema, openApiSpec)
+        ...requestBodySchema
       };
 
       if (operation.requestBody.required) {

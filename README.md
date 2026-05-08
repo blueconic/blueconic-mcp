@@ -216,8 +216,12 @@ For local development, point the command to `src/client-side-server.ts` in the s
 
 - The server discovers schemas dynamically from the tenant's OpenAPI specification at startup, but only exposes operations that are explicitly listed in `APPROVED_OPERATION_POLICIES` in `src/openapi-tools.ts`.
 - The approved surface currently covers reviewed BlueConic REST API v2 data operations. OAuth authorization, token issuance, and token revocation endpoints are intentionally excluded.
-- Tool annotations are derived from the HTTP method and operation text so clients can distinguish read-only, write, and destructive operations.
-- Write-capable tools can create/update content stores and content store items, bulk delete content store items, create/update/delete models, create/update/delete groups and profiles through bulk endpoints, create/update/delete profile or group properties, create/update URL mappings, and register interaction or pageview events.
+- Every approved operation has an explicit risk policy: `read`, `additive_write`, or `destructive_write`, with confirmation and batch-size settings where needed.
+- Tool annotations are emitted from that explicit risk policy so clients can distinguish read-only, additive write, and destructive write operations.
+- Write-capable tools include warning-rich descriptions and support `dryRun: true` to preview the target endpoint, resolved path parameters, estimated object count, risk, caps, and confirmation requirements without making a live API call.
+- Destructive write tools require server-enforced confirmation before execution. Clients with MCP elicitation support get an interactive confirmation request; other clients receive a one-time confirmation token that must be supplied on a second identical call as a top-level `confirmationToken` argument, next to `requestBody`, not inside it. Fallback responses include a display hint telling surfaces not to show the token value in end-user chat.
+- Bulk write calls are capped by the MCP server. `BLUECONIC_MAX_BULK_ITEMS` defaults to `100`; `BLUECONIC_MAX_DESTRUCTIVE_BULK_ITEMS` defaults to `25`.
+- Write-capable tools can create content stores, add or update content store items, create/update models, create/update profile or group properties, create/update URL mappings, and register interaction or pageview events.
 - Each tool requests only the OAuth scopes declared by its OpenAPI operation when it is called.
 - OAuth tokens are cached in memory and refreshed automatically before expiration.
 - Responses are returned as formatted JSON when possible, with text or base64 fallbacks for non-JSON payloads.
