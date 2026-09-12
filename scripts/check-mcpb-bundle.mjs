@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -51,9 +51,13 @@ if (listResult.status !== 0) {
   throw new Error(`Could not pack the bundle to check its contents: ${listResult.stderr}`);
 }
 
-const unzipResult = spawnSync("unzip", ["-Z1", resolve(repoRoot, "dist", "check-bundle-contents.mcpb")], {
+const contentsFile = resolve(repoRoot, "dist", "check-bundle-contents.mcpb");
+const unzipResult = spawnSync("unzip", ["-Z1", contentsFile], {
   encoding: "utf8"
 });
+
+// Leave nothing behind in dist/, which a release reads.
+await rm(contentsFile, { force: true });
 
 if (unzipResult.status === 0) {
   const packed = unzipResult.stdout.split("\n").map((line) => line.trim()).filter(Boolean).sort();

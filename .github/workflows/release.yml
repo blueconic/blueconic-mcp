@@ -1,0 +1,57 @@
+name: Release
+
+# npm version tags the commit, so publishing the module also publishes the two
+# Claude Desktop bundles here. A release asset downloads without a GitHub
+# account and does not expire, which a workflow artifact does neither of - an
+# artifact is for a reviewer installing the build of one pull request.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Each pack runs that bundle's own check first, so a broken bundle never
+      # reaches a release.
+      - name: Pack both bundles
+        run: |
+          npm run pack:mcpb
+          npm run pack:mcpb:public
+
+      # The support article links the unversioned names, so the URL it carries
+      # survives every release:
+      #   https://github.com/blueconic/blueconic-mcp/releases/latest/download/blueconic-public-mcp.mcpb
+      - name: Add the unversioned names
+        run: |
+          cp dist/blueconic-mcp-*.mcpb dist/blueconic-mcp.mcpb
+          cp dist/blueconic-public-mcp-*.mcpb dist/blueconic-public-mcp.mcpb
+          ls -l dist/*.mcpb
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            dist/blueconic-mcp.mcpb \
+            dist/blueconic-public-mcp.mcpb \
+            dist/blueconic-mcp-*.mcpb \
+            dist/blueconic-public-mcp-*.mcpb

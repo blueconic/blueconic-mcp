@@ -147,6 +147,26 @@ unreachable tenant. So this bundle never exits on a problem: it answers the hand
 reason as a JSON-RPC error naming the field to fix. The check drives it with no credentials and fails if the
 process exits, or if the answer does not name the missing setting.
 
+## Releases
+
+A tag that starts with `v` publishes both bundles as assets of a GitHub release
+(`.github/workflows/release.yml`). `npm version` already creates such a tag, so the existing
+`publish-release` script publishes the module and the bundles together — as long as the tag reaches the
+remote, which needs `git push --follow-tags`.
+
+Each release carries four assets: both bundles under their versioned names, and both under unversioned
+names. The unversioned pair is what documentation should link, because the URL then survives every later
+release:
+
+```text
+https://github.com/blueconic/blueconic-mcp/releases/latest/download/blueconic-mcp.mcpb
+https://github.com/blueconic/blueconic-mcp/releases/latest/download/blueconic-public-mcp.mcpb
+```
+
+A release asset downloads without a GitHub account and does not expire. The `mcpb-bundles` artifact that
+CI uploads on every run does neither — it is for a reviewer installing the build of one pull request, not
+a way to hand a bundle to a customer.
+
 ## Cursor
 
 Add this to `.cursor/mcp.json` when using the published npm package:
