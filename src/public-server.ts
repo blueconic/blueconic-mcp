@@ -19,7 +19,7 @@
 import { createInterface } from "node:readline";
 
 export const SERVER_NAME = "blueconic-public-mcp";
-export const SERVER_VERSION = "0.2.0";
+export const SERVER_VERSION = "1.0.0";
 
 const FALLBACK_PROTOCOL_VERSION = "2025-06-18";
 const REQUEST_TIMEOUT_MS = 60_000;
