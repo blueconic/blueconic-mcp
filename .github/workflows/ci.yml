@@ -41,6 +41,16 @@ jobs:
       - name: Test the public MCP bundle
         run: npm run test:mcpb:public
 
+      # Blocks on an advisory in what actually ships - the module's runtime
+      # dependencies, which the REST connector bundles into its own
+      # server/index.mjs. Build tooling is reported below rather than blocking,
+      # because an advisory in eslint or jest does not reach a customer.
+      - name: Audit what ships
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit the build tooling (report only)
+        run: npm audit || true
+
       - name: Validate both manifests
         run: |
           npx mcpb validate manifest.json

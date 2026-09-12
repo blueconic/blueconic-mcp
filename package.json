@@ -32,7 +32,7 @@
     "pack:mcpb:public": "npm run build:mcpb:public && npm run check:mcpb:public && node scripts/pack-public-mcpb.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.18.0"
+    "@modelcontextprotocol/sdk": "^1.30.0"
   },
   "devDependencies": {
     "@anthropic-ai/mcpb": "^1.1.0",
