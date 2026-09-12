@@ -41,6 +41,15 @@ describe("resolveEndpoint", () => {
     expect(resolveEndpoint("").reason).toContain("no tenant URL yet");
   });
 
+  it("refuses plain HTTP, because the credentials travel as headers", () => {
+    expect(resolveEndpoint("http://tenantname.blueconic.net").reason).toContain("must use HTTPS");
+  });
+
+  it("allows plain HTTP on loopback, for a tenant on the developer's own machine", () => {
+    expect(resolveEndpoint("http://localhost:3737").url?.toString()).toBe("http://localhost:3737/mcp");
+    expect(resolveEndpoint("http://127.0.0.1:8080").url?.toString()).toBe("http://127.0.0.1:8080/mcp");
+  });
+
   it("refuses a URL that carries some other path", () => {
     expect(resolveEndpoint("https://tenantname.blueconic.net/rest/v2").reason).toContain("/rest/v2");
   });

@@ -45,6 +45,11 @@ export function readSetting(value: string | undefined): string {
   return /^\$\{.*\}$/.test(text) ? "" : text;
 }
 
+/** A tenant on the developer's own machine, the one case plain HTTP is safe. */
+function isLoopback(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
+}
+
 /**
  * Builds the MCP endpoint of a tenant out of what the person typed. Accepts
  * the bare host, the tenant URL and the full endpoint, so a reader of the
@@ -66,6 +71,17 @@ export function resolveEndpoint(raw: string | undefined): EndpointResolution {
     url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
   } catch {
     return { reason: `The tenant URL in the extension settings is not a URL: '${value}'` };
+  }
+
+  if (url.protocol === "http:" && !isLoopback(url.hostname)) {
+    // The credentials travel as request headers, so plain HTTP puts the client
+    // secret on the wire in the clear. Loopback stays allowed for a developer
+    // running a tenant on their own machine.
+    return {
+      reason:
+        `The tenant URL must use HTTPS. '${url.hostname}' was given over plain HTTP, which would send the ` +
+        "client secret unencrypted."
+    };
   }
 
   const path = url.pathname.replace(/\/+$/, "");
