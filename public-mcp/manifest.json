@@ -1,0 +1,85 @@
+{
+  "manifest_version": "0.3",
+  "name": "blueconic-public-mcp",
+  "display_name": "BlueConic (public MCP server)",
+  "version": "0.2.0",
+  "description": "Connects Claude to the public MCP server of your own BlueConic tenant.",
+  "long_description": "Connects Claude to the MCP server that runs inside your BlueConic tenant, at https://<tenant>/mcp. The tenant builds its tool set from its own REST API, so the tools follow your tenant rather than a fixed list, and it adds the deterministic search_objects tool that answers a 'how many' question with an exact count instead of the length of one page.\n\nThis is the public (tenant) server, and it is read-only. The BlueConic connector in the same repository runs the client locally against the REST API instead; install that one if you need the write operations, which the tenant server does not expose.\n\nEvery call carries the read scopes of the OAuth application you configure here, and the tenant filters each answer to what that application's 'run as user' may see.",
+  "author": {
+    "name": "BlueConic",
+    "url": "https://www.blueconic.com"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/index.mjs"
+      ],
+      "env": {
+        "BLUECONIC_TENANT_URL": "${user_config.tenant_url}",
+        "OAUTH_CLIENT_ID": "${user_config.client_id}",
+        "OAUTH_CLIENT_SECRET": "${user_config.client_secret}",
+        "BLUECONIC_OAUTH_TOKEN": "${user_config.oauth_token}"
+      }
+    }
+  },
+  "user_config": {
+    "tenant_url": {
+      "type": "string",
+      "title": "Tenant URL",
+      "description": "The address of your BlueConic tenant, for example https://tenantname.blueconic.net",
+      "required": true
+    },
+    "client_id": {
+      "type": "string",
+      "title": "OAuth Client ID",
+      "description": "The client ID of an OAuth application of your tenant, with client credentials enabled and a run-as user set",
+      "sensitive": true,
+      "required": false
+    },
+    "client_secret": {
+      "type": "string",
+      "title": "OAuth Client Secret",
+      "description": "The client secret of that same OAuth application",
+      "sensitive": true,
+      "required": false
+    },
+    "oauth_token": {
+      "type": "string",
+      "title": "OAuth token (optional)",
+      "description": "Use a token instead of a client ID and secret. When this is set, it is the one that counts.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "tools_generated": true,
+  "homepage": "https://www.blueconic.com",
+  "documentation": "https://support.blueconic.com/en/articles/415706-blueconic-mcp-client-for-ai-coding-assistants",
+  "support": "https://support.blueconic.com",
+  "license": "SEE LICENSE IN LICENSE",
+  "keywords": [
+    "blueconic",
+    "cdp",
+    "mcp",
+    "segments",
+    "profiles",
+    "search"
+  ],
+  "privacy_policies": [
+    "https://www.blueconic.com/privacy-policy"
+  ],
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  },
+  "icon": "icon.png"
+}

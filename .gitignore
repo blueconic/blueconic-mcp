@@ -77,3 +77,7 @@ test-reports/
 # IDEs and editors
 *.code-workspace
 .claude/
+
+# Icons copied into the public MCP bundle at build time
+public-mcp/icon.png
+public-mcp/icon-dark.png

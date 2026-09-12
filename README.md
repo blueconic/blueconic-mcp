@@ -6,6 +6,22 @@ BlueConic MCP is a local MCP server that loads a BlueConic tenant's OpenAPI spec
 - Standard stdio MCP clients such as Cursor, Gemini CLI, VS Code, and other MCP-capable tools
 - Local development from TypeScript source under `src/`
 
+## Two connectors, one repository
+
+This repository builds two `.mcpb` bundles. They reach the same tenant by different routes, and a customer
+installs the one that matches what they need.
+
+| | `blueconic-mcp` | `blueconic-public-mcp` |
+|---|---|---|
+| Talks to | the tenant's **REST API**, tools built from its OpenAPI spec | the tenant's **public MCP server** at `https://<tenant>/mcp` |
+| Operations | read and write, with confirmation and batch limits on a write | read only |
+| Tools | the curated allowlist in `src/openapi-tools.ts` | whatever the tenant's own servlet registers, plus `search_objects` |
+| Needs | any tenant with an OpenAPI spec | a tenant that serves `/mcp` |
+| Built by | `npm run pack:mcpb` | `npm run pack:mcpb:public` |
+
+`search_objects` is the reason the second bundle exists: it answers "how many X match Y" with an exact count
+read out of the tenant's own index, rather than the length of one page of a list endpoint.
+
 More information is available in the BlueConic support docs:
 https://support.blueconic.com/en/articles/415706-blueconic-mcp-client-for-ai-coding-assistants
 
@@ -18,6 +34,8 @@ Opening a BlueConic tenant to any MCP client can expose sensitive data if the mo
 ```text
 src/
   client-side-server.ts
+  public-server.ts
+  public-server-entry.ts
   api-client.ts
   auth.ts
   logging.ts
@@ -103,6 +121,31 @@ The Claude packaging flow stays intentionally small:
 - the generated bundle does not include the unsupported dynamic-require shim
 - startup reaches the expected credential validation path instead of crashing during module load
 - `.mcpbignore` does not exclude `package.json`, which the runtime reads for the connector version
+
+### The public MCP connector
+
+The second bundle lives in `public-mcp/`, and is built from `src/public-server.ts`:
+
+```bash
+npm run validate:mcpb:public
+npm run pack:mcpb:public
+```
+
+This generates `dist/blueconic-public-mcp-<version>.mcpb`, which installs the same way. The bundle carries its
+own version in `public-mcp/manifest.json`, because it tracks the tenant servlet rather than the npm package.
+
+The bundle is a bridge, not a second client: it reads a JSON-RPC message from standard input, posts it to
+`https://<tenant>/mcp` with the credentials as headers, and writes the answer back out. It needs a local
+process at all because Claude Desktop starts local servers over stdio, its custom connector has no field for a
+custom header, and the MCPB format has no remote server type.
+
+**`npm run check:mcpb:public` asserts the opposite startup behaviour to `check:mcpb`, on purpose.** A host
+starts an extension as soon as it is installed, before anybody fills in the settings, and probes it before
+anybody asks it anything. A server that exits during that probe is reported as `Version negotiation failed:
+the connection closed during the server/discover probe`, which names neither the missing setting nor an
+unreachable tenant. So this bundle never exits on a problem: it answers the handshake itself, and returns the
+reason as a JSON-RPC error naming the field to fix. The check drives it with no credentials and fails if the
+process exits, or if the answer does not name the missing setting.
 
 ## Cursor
 

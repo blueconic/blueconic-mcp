@@ -14,7 +14,9 @@
     "dev": "node --import=tsx --inspect src/client-side-server.ts",
     "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json",
     "build:mcpb": "node scripts/build-mcpb.mjs",
+    "build:mcpb:public": "node scripts/build-public-mcpb.mjs",
     "check:mcpb": "node scripts/check-mcpb-bundle.mjs",
+    "check:mcpb:public": "node scripts/check-public-mcpb-bundle.mjs",
     "lint": "eslint src scripts",
     "publish-snapshot": "npm version prerelease --preid SNAPSHOT && npm run build && npm test && npm i && npm publish --tag snapshot",
     "publish-release": "npm version patch && npm run build && npm test && npm i && npm publish --tag latest",
@@ -23,7 +25,9 @@
     "test:mcpb": "npm run build:mcpb && npm run check:mcpb",
     "test": "npm run test:unit && npm run test:mcpb",
     "validate:mcpb": "npm run build:mcpb && npm run check:mcpb && mcpb validate .",
-    "pack:mcpb": "npm run build:mcpb && npm run check:mcpb && node scripts/pack-mcpb.mjs"
+    "validate:mcpb:public": "npm run build:mcpb:public && npm run check:mcpb:public && mcpb validate public-mcp/manifest.json",
+    "pack:mcpb": "npm run build:mcpb && npm run check:mcpb && node scripts/pack-mcpb.mjs",
+    "pack:mcpb:public": "npm run build:mcpb:public && npm run check:mcpb:public && node scripts/pack-public-mcpb.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.18.0"
