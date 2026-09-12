@@ -30,6 +30,44 @@ if (ignoredLines.includes("package.json")) {
   throw new Error(".mcpbignore excludes package.json, but the Claude Desktop runtime reads it at startup");
 }
 
+// The README promises this exact set. A new directory at the repository root
+// lands in the bundle unless .mcpbignore names it, which is easy to miss: the
+// packed file still installs and still works, it just carries files that are
+// nothing to do with this connector.
+const EXPECTED_BUNDLE_FILES = [
+  "icon-dark.png",
+  "icon.png",
+  "manifest.json",
+  "package.json",
+  "server/index.mjs"
+];
+
+const listResult = spawnSync("mcpb", ["pack", ".", resolve(repoRoot, "dist", "check-bundle-contents.mcpb")], {
+  cwd: repoRoot,
+  encoding: "utf8"
+});
+
+if (listResult.status !== 0) {
+  throw new Error(`Could not pack the bundle to check its contents: ${listResult.stderr}`);
+}
+
+const unzipResult = spawnSync("unzip", ["-Z1", resolve(repoRoot, "dist", "check-bundle-contents.mcpb")], {
+  encoding: "utf8"
+});
+
+if (unzipResult.status === 0) {
+  const packed = unzipResult.stdout.split("\n").map((line) => line.trim()).filter(Boolean).sort();
+  const unexpected = packed.filter((file) => !EXPECTED_BUNDLE_FILES.includes(file));
+  const missing = EXPECTED_BUNDLE_FILES.filter((file) => !packed.includes(file));
+
+  if (unexpected.length > 0) {
+    throw new Error(`The bundle carries files it should not: ${unexpected.join(", ")}. Add them to .mcpbignore.`);
+  }
+  if (missing.length > 0) {
+    throw new Error(`The bundle is missing: ${missing.join(", ")}`);
+  }
+}
+
 const startupResult = spawnSync(process.execPath, [bundleOutputFile], {
   cwd: repoRoot,
   env: {

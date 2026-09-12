@@ -81,5 +81,17 @@
       "node": ">=18.0.0"
     }
   },
-  "icon": "icon.png"
+  "icon": "icon.png",
+  "icons": [
+    {
+      "src": "icon.png",
+      "size": "512x512",
+      "theme": "light"
+    },
+    {
+      "src": "icon-dark.png",
+      "size": "512x512",
+      "theme": "dark"
+    }
+  ]
 }

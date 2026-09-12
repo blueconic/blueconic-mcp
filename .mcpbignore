@@ -1,5 +1,7 @@
 # Keep the Claude Desktop bundle minimal.
 .claude/
+.github/
+public-mcp/
 .git/
 .vscode/
 coverage/
