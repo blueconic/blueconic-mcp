@@ -150,9 +150,24 @@ process exits, or if the answer does not name the missing setting.
 ## Releases
 
 A tag that starts with `v` publishes both bundles as assets of a GitHub release
-(`.github/workflows/release.yml`). `npm version` already creates such a tag, so the existing
-`publish-release` script publishes the module and the bundles together — as long as the tag reaches the
-remote, which needs `git push --follow-tags`.
+(`.github/workflows/release.yml`). Nothing else triggers it: merging a pull request does not.
+
+`npm version` already creates such a tag, so the existing `publish-release` script publishes the module
+and the bundles together — as long as the tag reaches the remote:
+
+```bash
+npm run publish-release
+git push --follow-tags
+```
+
+To release without touching the module, tag by hand:
+
+```bash
+git tag v1.1.3 && git push origin v1.1.3
+```
+
+The workflow also runs by hand from the Actions tab, where it asks for the tag to release. That tag has
+to exist already.
 
 Each release carries four assets: both bundles under their versioned names, and both under unversioned
 names. The unversioned pair is what documentation should link, because the URL then survives every later
