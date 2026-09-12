@@ -1,0 +1,58 @@
+name: CI
+
+# Both bundles are built and checked here, because a break in either one only
+# shows up at build time: the unit tests cover the modules, and each bundle's
+# check drives the packaged entry point the way a host starts it.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # Unit tests, then the REST connector's own bundle check, which asserts
+      # that it stops with a message when it has no credentials.
+      - name: Test the REST connector
+        run: npm test
+
+      # The public MCP bundle takes the opposite posture on purpose: its check
+      # fails if the process exits when it is misconfigured, because a host
+      # reports that as a closed connection rather than as a missing setting.
+      - name: Test the public MCP bundle
+        run: npm run test:mcpb:public
+
+      - name: Validate both manifests
+        run: |
+          npx mcpb validate manifest.json
+          npx mcpb validate public-mcp/manifest.json
+
+      - name: Pack both bundles
+        run: |
+          npm run pack:mcpb
+          npm run pack:mcpb:public
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcpb-bundles
+          path: dist/*.mcpb
+          if-no-files-found: error

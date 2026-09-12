@@ -24,6 +24,7 @@
     "prepack": "npm run build",
     "test:unit": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.config.cjs --coverage",
     "test:mcpb": "npm run build:mcpb && npm run check:mcpb",
+    "test:mcpb:public": "npm run build:mcpb:public && npm run check:mcpb:public",
     "test": "npm run test:unit && npm run test:mcpb",
     "validate:mcpb": "npm run build:mcpb && npm run check:mcpb && mcpb validate .",
     "validate:mcpb:public": "npm run build:mcpb:public && npm run check:mcpb:public && mcpb validate public-mcp/manifest.json",
