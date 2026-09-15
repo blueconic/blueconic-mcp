@@ -16,6 +16,7 @@
     "build:mcpb": "node scripts/build-mcpb.mjs",
     "check:mcpb": "node scripts/check-mcpb-bundle.mjs",
     "lint": "eslint src scripts",
+    "version": "node scripts/sync-manifest-version.mjs && git add manifest.json",
     "publish-snapshot": "npm version prerelease --preid SNAPSHOT && npm run build && npm test && npm i && npm publish --tag snapshot",
     "publish-release": "npm version patch && npm run build && npm test && npm i && npm publish --tag latest",
     "prepack": "npm run build",
