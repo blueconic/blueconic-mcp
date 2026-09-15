@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,6 +28,57 @@ const ignoredLines = mcpbIgnore
 
 if (ignoredLines.includes("package.json")) {
   throw new Error(".mcpbignore excludes package.json, but the Claude Desktop runtime reads it at startup");
+}
+
+// The README promises this exact set. A new directory at the repository root
+// lands in the bundle unless .mcpbignore names it, which is easy to miss: the
+// packed file still installs and still works, it just carries files that are
+// nothing to do with this connector.
+const EXPECTED_BUNDLE_FILES = [
+  "icon-dark.png",
+  "icon.png",
+  "manifest.json",
+  "package.json",
+  "server/index.mjs"
+];
+
+const listResult = spawnSync("mcpb", ["pack", ".", resolve(repoRoot, "dist", "check-bundle-contents.mcpb")], {
+  cwd: repoRoot,
+  encoding: "utf8"
+});
+
+if (listResult.status !== 0) {
+  throw new Error(`Could not pack the bundle to check its contents: ${listResult.stderr}`);
+}
+
+const contentsFile = resolve(repoRoot, "dist", "check-bundle-contents.mcpb");
+const unzipResult = spawnSync("unzip", ["-Z1", contentsFile], {
+  encoding: "utf8"
+});
+
+// Leave nothing behind in dist/, which a release reads.
+await rm(contentsFile, { force: true });
+
+// Every other spawnSync result in this file throws on an unexpected outcome (listResult above,
+// startupResult and insecureTlsResult below). This one has to as well: a missing or failing unzip
+// binary must not silently skip the one check this script exists to run.
+if (unzipResult.error) {
+  throw unzipResult.error;
+}
+
+if (unzipResult.status !== 0) {
+  throw new Error(`Could not list the packed bundle's contents: ${unzipResult.stderr}`);
+}
+
+const packed = unzipResult.stdout.split("\n").map((line) => line.trim()).filter(Boolean).sort();
+const unexpected = packed.filter((file) => !EXPECTED_BUNDLE_FILES.includes(file));
+const missing = EXPECTED_BUNDLE_FILES.filter((file) => !packed.includes(file));
+
+if (unexpected.length > 0) {
+  throw new Error(`The bundle carries files it should not: ${unexpected.join(", ")}. Add them to .mcpbignore.`);
+}
+if (missing.length > 0) {
+  throw new Error(`The bundle is missing: ${missing.join(", ")}`);
 }
 
 const startupResult = spawnSync(process.execPath, [bundleOutputFile], {

@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # Unit tests, then the bundle's own check, which asserts that it stops
+      # with a message when it has no credentials and that it packs exactly
+      # the files the README promises.
+      - name: Test
+        run: npm test
+
+      # Blocks on an advisory in what actually ships - the module's runtime
+      # dependencies, which the connector bundles into its own
+      # server/index.mjs. Build tooling is reported below rather than blocking,
+      # because an advisory in eslint or jest does not reach a customer.
+      - name: Audit what ships
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit the build tooling (report only)
+        run: npm audit || true
+
+      - name: Validate the manifest
+        run: npx mcpb validate manifest.json
+
+      - name: Pack the bundle
+        run: npm run pack:mcpb
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mcpb-bundle
+          path: dist/*.mcpb
+          if-no-files-found: error

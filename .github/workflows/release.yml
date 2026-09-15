@@ -1,0 +1,67 @@
+name: Release
+
+# npm version tags the commit, so publishing the module also publishes the
+# Claude Desktop bundle here. A release asset downloads without a GitHub
+# account and does not expire, which a workflow artifact does neither of - an
+# artifact is for a reviewer installing the build of one pull request.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release, for example v1.1.3. It must already exist."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # On a tag push, github.ref is already that tag. Run by hand, github.ref is the branch
+      # the workflow was launched from, not inputs.tag - without this, a manual run would build
+      # from whatever that branch's HEAD happens to be and publish it under the requested tag's
+      # name, which can be a different commit than the tag actually points at.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # The pack runs the bundle's own check first, so a broken bundle never
+      # reaches a release.
+      - name: Pack the bundle
+        run: npm run pack:mcpb
+
+      # The support article links the unversioned name, so the URL it carries
+      # survives every release:
+      #   https://github.com/blueconic/blueconic-mcp/releases/latest/download/blueconic-mcp.mcpb
+      - name: Add the unversioned name
+        run: |
+          cp dist/blueconic-mcp-*.mcpb dist/blueconic-mcp.mcpb
+          ls -l dist/*.mcpb
+
+      # On a tag push the tag is the ref. Run by hand, the ref is a branch, so
+      # the tag has to be given - otherwise the release would be named after
+      # the branch and would tag it.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes \
+            dist/blueconic-mcp.mcpb \
+            dist/blueconic-mcp-*.mcpb
