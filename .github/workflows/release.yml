@@ -23,7 +23,13 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      # On a tag push, github.ref is already that tag. Run by hand, github.ref is the branch
+      # the workflow was launched from, not inputs.tag - without this, a manual run would build
+      # from whatever that branch's HEAD happens to be and publish it under the requested tag's
+      # name, which can be a different commit than the tag actually points at.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: actions/setup-node@v7
         with:
