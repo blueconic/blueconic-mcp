@@ -59,17 +59,26 @@ const unzipResult = spawnSync("unzip", ["-Z1", contentsFile], {
 // Leave nothing behind in dist/, which a release reads.
 await rm(contentsFile, { force: true });
 
-if (unzipResult.status === 0) {
-  const packed = unzipResult.stdout.split("\n").map((line) => line.trim()).filter(Boolean).sort();
-  const unexpected = packed.filter((file) => !EXPECTED_BUNDLE_FILES.includes(file));
-  const missing = EXPECTED_BUNDLE_FILES.filter((file) => !packed.includes(file));
+// Every other spawnSync result in this file throws on an unexpected outcome (listResult above,
+// startupResult and insecureTlsResult below). This one has to as well: a missing or failing unzip
+// binary must not silently skip the one check this script exists to run.
+if (unzipResult.error) {
+  throw unzipResult.error;
+}
 
-  if (unexpected.length > 0) {
-    throw new Error(`The bundle carries files it should not: ${unexpected.join(", ")}. Add them to .mcpbignore.`);
-  }
-  if (missing.length > 0) {
-    throw new Error(`The bundle is missing: ${missing.join(", ")}`);
-  }
+if (unzipResult.status !== 0) {
+  throw new Error(`Could not list the packed bundle's contents: ${unzipResult.stderr}`);
+}
+
+const packed = unzipResult.stdout.split("\n").map((line) => line.trim()).filter(Boolean).sort();
+const unexpected = packed.filter((file) => !EXPECTED_BUNDLE_FILES.includes(file));
+const missing = EXPECTED_BUNDLE_FILES.filter((file) => !packed.includes(file));
+
+if (unexpected.length > 0) {
+  throw new Error(`The bundle carries files it should not: ${unexpected.join(", ")}. Add them to .mcpbignore.`);
+}
+if (missing.length > 0) {
+  throw new Error(`The bundle is missing: ${missing.join(", ")}`);
 }
 
 const startupResult = spawnSync(process.execPath, [bundleOutputFile], {
