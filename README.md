@@ -1,5 +1,11 @@
 # BlueConic MCP
 
+> **Deprecated since R104.** The tenant now serves its own MCP endpoint directly at
+> `https://<tenantname>.blueconic.net/mcp`, discoverable via the standard OAuth 2.1 authorization code flow (RFC
+> 9728 / RFC 8414) — no local connector, custom header, or separate credential configuration needed. Point your
+> MCP client at that URL instead of installing this connector. This repository is kept for tenants still on an
+> older release.
+
 BlueConic MCP is a local MCP server that loads a BlueConic tenant's OpenAPI specification at startup and turns the tenant's supported REST operations into MCP tools. This repository supports:
 
 - Claude Desktop through a packaged `.mcpb` connector
@@ -103,6 +109,41 @@ The Claude packaging flow stays intentionally small:
 - the generated bundle does not include the unsupported dynamic-require shim
 - startup reaches the expected credential validation path instead of crashing during module load
 - `.mcpbignore` does not exclude `package.json`, which the runtime reads for the connector version
+- the packed bundle carries exactly the five files above, and nothing else — a new file or directory at the
+  repository root still installs and works if `.mcpbignore` does not name it, so nothing else would catch it
+
+## Releases
+
+A tag that starts with `v` publishes the bundle as an asset of a GitHub release
+(`.github/workflows/release.yml`). Nothing else triggers it: merging a pull request does not.
+
+`npm version` already creates such a tag, so the existing `publish-release` script publishes the module
+and the bundle together — as long as the tag reaches the remote:
+
+```bash
+npm run publish-release
+git push --follow-tags
+```
+
+To release without touching the module, tag by hand:
+
+```bash
+git tag v1.1.3 && git push origin v1.1.3
+```
+
+The workflow also runs by hand from the Actions tab, where it asks for the tag to release. That tag has
+to exist already.
+
+The release carries two assets: the bundle under its versioned name, and under an unversioned one. The
+unversioned name is what documentation should link, because the URL then survives every later release:
+
+```text
+https://github.com/blueconic/blueconic-mcp/releases/latest/download/blueconic-mcp.mcpb
+```
+
+A release asset downloads without a GitHub account and does not expire. The `mcpb-bundle` artifact that
+CI uploads on every run does neither — it is for a reviewer installing the build of one pull request, not
+a way to hand a bundle to a customer.
 
 ## Cursor
 
